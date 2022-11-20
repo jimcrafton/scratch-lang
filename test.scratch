@@ -1,0 +1,23 @@
+
+obj sendMessage;
+aa := "hello";
+obj sendMessage:aa+" from me";
+
+23 + d ;
+
+
+231+d ;
+
+"hello there it's a nice day \f "
+
+
+x := 678 +1.0;
+
+str := "hjsdfshdfjsdhf"
+
+c := fgg.ho + 5;
+
+bb := 0x856FD0;
+bb := 0B101101101;
+
+x := true + 12;
