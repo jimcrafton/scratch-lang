@@ -15,7 +15,15 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="new-lang-test1.cpp">
+    <ClInclude Include="src\string_ref.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Lexer.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\scratch-lang-test1.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

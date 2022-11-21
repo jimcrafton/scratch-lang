@@ -10,8 +10,14 @@ obj sendMessage:aa+" from me";
 
 "hello there it's a nice day \f "
 
+#this isa commetn  { more }
 
-x := 678 +1.0;
+x := (678 +1.0);
+
+#{ more stuff { } # dkjf 
+sldkf sldfj slkdfj 
+fg nbkcv
+}#
 
 str := "hjsdfshdfjsdhf"
 
