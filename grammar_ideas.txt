@@ -1,0 +1,54 @@
+grammar ideas
+
+[] optional
+
+
+alpha ::== A..Z,a..z
+digits ::= 0-9+
+dot  ::== .
+
+any_char ::== *
+
+eol ::== \r|\n|\r\n
+
+identifier ::== alpha [alpha|digits]+
+
+module ::= name  [namespace]+ [statements]+
+name ::== identifier
+namespace ::== identifier '{' statements '}'
+
+statements ::== statement|comment+
+
+comment ::== single_line_comment|multi_line_comment
+single_line_comment :== '#' any_char+  eol
+multi_line_comment ::==  start_comments [any_char+|eol]+ end_comments
+
+start_comments ::==  '#{'
+end_comments  ::==  '}#'
+
+end_of_statement ::== ;
+
+statement ::==  expression|assignment end_of_statement
+
+assignment ::== instance assignment-op expression
+
+assignment-op ::== ':='
+
+namespace_name ::== identifier ['.'identifier]+
+
+variable ::== [namespace_name'.']identifier
+
+expression ::== send_message
+
+instance ::== variable|expression
+
+send_message ::== instance message
+
+message ::== message_name|message_name_params
+message_name ::== identifier
+
+message_name_params ::== identifier':' message_param [identifier':' message_param]+
+message_param :== instance
+
+
+
