@@ -4,8 +4,10 @@ grammar ideas
 
 
 alpha ::== A..Z,a..z
-digits ::= 0-9+
+digit ::== 0-9
+digits ::= digit+
 dot  ::== .
+decimal ::== .
 
 any_char ::== *
 
@@ -13,8 +15,11 @@ eol ::== \r|\n|\r\n
 
 identifier ::== alpha [alpha|digits]+
 
-module ::= name  [namespace]+ [statements]+
-name ::== identifier
+module ::= 'module' module_info  [namespace]+ [statements]+
+module_info  ::== name [',' version]
+name ::== identifier[dot identifier]+
+version ::== identifier
+
 namespace ::== identifier '{' statements '}'
 
 statements ::== statement|comment+
@@ -26,7 +31,7 @@ multi_line_comment ::==  start_comments [any_char+|eol]+ end_comments
 start_comments ::==  '#{'
 end_comments  ::==  '}#'
 
-end_of_statement ::== ;
+end_of_statement ::== ';'
 
 statement ::==  expression|assignment end_of_statement
 
@@ -36,13 +41,20 @@ assignment-op ::== ':='
 
 namespace_name ::== identifier ['.'identifier]+
 
-variable ::== [namespace_name'.']identifier
+variable ::== [namespace_name'.']identifier|var_literal
+var_literal ::== integer_literal|decimal_literal|binary_literal|hexadecimal_literal|string_literal
+
+integer_literal :==  digits
+decimal_literal ::== digits [decimal digits]
+hexadecimal_literal  ::== '0x|X' digit|'A..F' [digit|'A..F']+
+binary_literal  ::== '0b|B' 0|1 [0|1]+
+string_literal  ::== '"' [any_char]+ '"'
 
 expression ::== send_message
 
-instance ::== variable|expression
-
 send_message ::== instance message
+
+instance ::== variable|expression
 
 message ::== message_name|message_name_params
 message_name ::== identifier
