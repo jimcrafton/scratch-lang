@@ -50,9 +50,13 @@ hexadecimal_literal  ::== '0x|X' digit|'A..F' [digit|'A..F']+
 binary_literal  ::== '0b|B' 0|1 [0|1]+
 string_literal  ::== '"' [any_char]+ '"'
 
-expression ::== send_message
+expression ::== send_message | open_paren expression close_paren
 
-send_message ::== instance message
+open_paren ::== '('
+close_paren ::== ')'
+
+
+send_message ::== instance message|operator-message
 
 instance ::== variable|expression
 
@@ -61,6 +65,18 @@ message_name ::== identifier
 
 message_name_params ::== identifier':' message_param [identifier':' message_param]+
 message_param :== instance
+
+
+operator-message ::== operator operand 
+operator ::== addition-op|subtraction-op|multiplication-op|division-op|mod-op
+operand ::== instance
+
+addition-op ::== '+'
+subtraction-op ::== '-'
+multiplication-op ::==  '*' 
+division-op ::== '/'
+mod-op ::== '%'
+
 
 
 
