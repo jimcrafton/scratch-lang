@@ -20,9 +20,9 @@ module_info  ::== name [',' version]
 name ::== identifier[dot identifier]+
 version ::== identifier
 
-namespace ::== identifier '{' statements '}'
+namespace ::== identifier '{' statements|namespace '}'
 
-statements ::== statement|comment+
+statements ::== (statement|comment)+
 
 comment ::== single_line_comment|multi_line_comment
 single_line_comment :== '#' any_char+  eol
