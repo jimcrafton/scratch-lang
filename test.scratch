@@ -1,14 +1,25 @@
 
+module stuff
+
+namespace foobar {
+
+}
+
+namespace junk {
+
 obj sendMessage;
 aa := "hello";
 obj sendMessage:aa+" from me";
 
 23 + d ;
+}
 
+obj nuclearWessels { 66+1 } ;
 
 231+d ;
 
-"hello there it's a nice day \f "
+"hello there it's a 
+nice day \f "
 
 #this isa commetn  { more }
 
@@ -27,3 +38,4 @@ bb := 0x856FD0;
 bb := 0B101101101;
 
 x := true + 12;
+

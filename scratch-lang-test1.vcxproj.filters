@@ -21,6 +21,9 @@
     <ClInclude Include="src\Lexer.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Parser.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\scratch-lang-test1.cpp">

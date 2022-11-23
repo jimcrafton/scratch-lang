@@ -132,6 +132,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="src\Lexer.h" />
+    <ClInclude Include="src\Parser.h" />
     <ClInclude Include="src\string_ref.h" />
   </ItemGroup>
   <ItemGroup>
