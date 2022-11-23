@@ -1,0 +1,82 @@
+grammar ideas
+
+[] optional
+
+
+alpha ::== A..Z,a..z
+digit ::== 0-9
+digits ::= digit+
+dot  ::== .
+decimal ::== .
+
+any_char ::== *
+
+eol ::== \r|\n|\r\n
+
+identifier ::== alpha [alpha|digits]+
+
+module ::= 'module' module_info  [namespace]+ [statements]+
+module_info  ::== name [',' version]
+name ::== identifier[dot identifier]+
+version ::== identifier
+
+namespace ::== identifier '{' statements|namespace '}'
+
+statements ::== (statement|comment)+
+
+comment ::== single_line_comment|multi_line_comment
+single_line_comment :== '#' any_char+  eol
+multi_line_comment ::==  start_comments [any_char+|eol]+ end_comments
+
+start_comments ::==  '#{'
+end_comments  ::==  '}#'
+
+end_of_statement ::== ';'
+
+statement ::==  expression|assignment end_of_statement
+
+assignment ::== instance assignment-op expression
+
+assignment-op ::== ':='
+
+namespace_name ::== identifier ['.'identifier]+
+
+variable ::== [namespace_name'.']identifier|var_literal
+var_literal ::== integer_literal|decimal_literal|binary_literal|hexadecimal_literal|string_literal
+
+integer_literal :==  digits
+decimal_literal ::== digits [decimal digits]
+hexadecimal_literal  ::== '0x|X' digit|'A..F' [digit|'A..F']+
+binary_literal  ::== '0b|B' 0|1 [0|1]+
+string_literal  ::== '"' [any_char]+ '"'
+
+expression ::== send_message | open_paren expression close_paren
+
+open_paren ::== '('
+close_paren ::== ')'
+
+
+send_message ::== instance message|operator-message
+
+instance ::== variable|expression
+
+message ::== message_name|message_name_params
+message_name ::== identifier
+
+message_name_params ::== identifier':' message_param [identifier':' message_param]+
+message_param :== instance
+
+
+operator-message ::== operator operand 
+operator ::== addition-op|subtraction-op|multiplication-op|division-op|mod-op
+operand ::== instance
+
+addition-op ::== '+'
+subtraction-op ::== '-'
+multiplication-op ::==  '*' 
+division-op ::== '/'
+mod-op ::== '%'
+
+
+
+
