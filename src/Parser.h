@@ -2,13 +2,23 @@
 #define _PARSER_H__
 
 
+#include "Lexer.h"
 
-
-class ParseNode {
-
+enum ParseNodeType {
+	UNKNOWN = 0,
+	SCALAR,
+	MODULE
 };
 
-class ScalarNode : public ParseNode {
+template <int X>
+class ParseNode {
+public:
+	ParseNodeType nodeType;
+
+	ParseNode() : nodeType(X) {}
+};
+
+class ScalarNode : public ParseNode<SCALAR> {
 
 };
 
@@ -30,12 +40,34 @@ class BooleanNode : public ScalarNode {
 
 };
 
+class ModuleNode : public ParseNode<MODULE> {
+public:
+
+};
 
 
 
 
 class Parser {
+public:
+	bool parseModule(const Lexer& lexer) {
 
+		const Token& t = lexer.currentContext()->tokens[0];
+		if (t.type == Token::IDENTIFIER && t.text == "module") {
+
+		}
+
+		return false;
+	}
+
+	bool parse(const Lexer& lexer) {
+		
+		if (!parseModule(lexer)) {
+			return false;
+		}
+
+		return true;
+	}
 };
 
 

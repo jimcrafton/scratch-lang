@@ -4,46 +4,23 @@
 #pragma once
 
 #include "string_ref.h"
+#include "Token.h"
 
-class Token {
+
+
+class FileContext {
 public:
-    enum Type {
-        UNKNOWN = 0,
-        INTEGER_LITERAL,
-        DECIMAL_LITERAL,
-        HEXADECIMAL_LITERAL,
-        BINARY_LITERAL,
-        BOOLEAN_LITERAL,
-        STRING_LITERAL,
-        END_OF_STATEMENT,
-        ASSIGMENT_OPERATOR,
-        ADDITION_OPERATOR,
-        SUBTRACTION_OPERATOR,
-        MULT_OPERATOR,
-        DIV_OPERATOR,
-        MOD_OPERATOR,
-        IDENTIFIER,
-        KEYWORD,
-        MESSAGE_SIGNATURE,
-        OPEN_PAREN,
-        CLOSE_PAREN,
-        OPEN_BLOCK,
-        CLOSE_BLOCK,   
-        OPEN_BRACKET,
-        CLOSE_BRACKET,
-        COMMENT,
-        COMMENT_START,
-        COMMENT_END,
-    };
+    std::string fileName;    
+    std::vector<Token> tokens;
+    std::vector<size_t> newLines;
+    std::string text;
 
-    string_ref text;
-    Type type;
-
-    Token() :type(UNKNOWN) {}
-
+    void clear() {
+        tokens.clear();
+        newLines.clear();
+        text = "";
+    }
 };
-
-
 
 class Lexer {
 
@@ -129,7 +106,7 @@ public:
         }
 
         if (ch == '\r') {
-            if (currentText[currentChIndex + 1] == '\n') {
+            if (currentText()[currentChIndex + 1] == '\n') {
                 return true;
             }
         }
@@ -212,23 +189,51 @@ public:
 
     std::deque<State> stateStack;
     std::string currentLexeme;
-    Token currentToken;
-    std::vector<Token> tokens;
+    Token currentToken;    
     size_t currentChIndex;
     size_t currentLexemeStart;
     size_t currentLexemeEnd;
-    size_t currentLine;
-    std::vector<size_t> newLines;
-    std::string currentText;
+    size_t currentLine;    
+    std::string currentFilename;
+    
     std::vector<std::string> keywords;
     std::string reservedCharacters;
 
-    Lexer() : currentChIndex(0), currentLexemeStart(0), currentLexemeEnd(0), currentLine(0) {
+    FileContext* currentCtx;
+    std::map<std::string,FileContext> files;
+
+    Lexer() : currentChIndex(0), currentLexemeStart(0), currentLexemeEnd(0), currentLine(0), currentCtx(NULL){
         stateStack.push_back(NONE);
         keywords = { "if", "else", "true", "false", "module", "namespace"};
         reservedCharacters = "()[]{};+-/*";
     }
     ~Lexer() {}
+
+    std::string& currentText() {
+        FileContext* fc = currentContext();
+        if (NULL == fc) {
+            throw std::exception("no file context found!");
+        }
+        return fc->text;
+    }
+
+    const std::string& currentText() const {
+        const FileContext* fc = currentContext();
+        if (NULL == fc) {
+            throw std::exception("no file context found!");
+        }
+        return fc->text;
+    }
+
+    const FileContext* currentContext() const {
+        auto it = files.find(currentFilename);
+        return &it->second;
+    }
+
+    FileContext* currentContext() {
+        auto it = files.find(currentFilename);
+        return &it->second;
+    }
 
     void pushState(State s)
     {
@@ -254,32 +259,32 @@ public:
         if ((offset < 0) && (abs(offset) >= currentChIndex)) {
             pos = 0;
         }
-        else if ((offset > 0) && (currentChIndex + offset >= currentText.size())) {
-            pos = currentText.size() - 1;
+        else if ((offset > 0) && (currentChIndex + offset >= currentText().size())) {
+            pos = currentText().size() - 1;
         }
         else {
             pos = currentChIndex + offset;
         }
-        return currentText[pos];
+        return currentText()[pos];
     }
 
     void processWhiteSpace(const char& ch) {
 
         if (isNewLine(ch)) {
-            newLines.push_back(currentChIndex);
+            currentContext()->newLines.push_back(currentChIndex);
             currentLine++;
         }
     }
     //1 based array
     size_t getChIndexForLine(size_t line) {
-        return newLines[line-1];
+        return currentContext()->newLines[line-1];
     }
 
 
     void processToken(State state)
     {
         currentToken.type = Token::UNKNOWN;
-        currentToken.text.assign(currentText.c_str()+ currentLexemeStart, currentLexemeEnd - currentLexemeStart);
+        currentToken.text.assign(currentText().c_str() + currentLexemeStart, currentLexemeEnd - currentLexemeStart);
         std::string s = currentToken.text.str();
         switch (state) {
             case STRING: {
@@ -380,7 +385,7 @@ public:
         popState();
         currentLexeme = "";
 
-        tokens.push_back(currentToken);
+        currentContext()->tokens.push_back(currentToken);
     }
 
     void error()
@@ -715,23 +720,47 @@ public:
     }
 
     void clear() {
-        currentText = "";
+        currentFilename = "";
         currentChIndex = 0;
         currentLexemeStart = 0;
         currentLexemeEnd = 0;
         currentLine = 1;
         clearState();
-        newLines.clear();
-        tokens.clear();
     }
 
-    bool process(const std::string& text)
+    bool lex(const std::string& fileName) {
+        std::string text;
+        FILE* f = fopen(fileName.c_str(), "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            size_t fs = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            char* tmp = new char[fs + 1];
+            memset(tmp, 0, fs + 1);
+            fread(tmp, 1, fs, f);
+            text = tmp;
+            delete[] tmp;
+            fclose(f);
+        }
+        else {
+            return false;
+        }
+
+
+        return lex(fileName, text);
+    }
+
+    bool lex(const std::string& fileName, const std::string& text)
     {
         clear();
-        currentText = text;
 
-        while (currentChIndex < currentText.size()) {
-            const char& ch = currentText[currentChIndex];
+        currentFilename = fileName;
+        files[currentFilename];
+
+        currentContext()->text = text;
+
+        while (currentChIndex < currentText().size()) {
+            const char& ch = currentText()[currentChIndex];
             if (!processCharacter(ch)) {
                 return false;
             }

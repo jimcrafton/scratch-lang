@@ -8,10 +8,11 @@ class basic_string_ref {
 public:
     typedef chT CharT;
 protected:
-    const CharT* buffer;    
+    const CharT* strPtr;    
     size_t len;
-public:
+public:    
     typedef chT CharT;
+    typedef std::char_traits<CharT> char_traits;
     typedef std::basic_string<CharT> StringT;
     typedef typename StringT::const_iterator  const_iterator;
 
@@ -19,11 +20,11 @@ public:
         npos = StringT::npos
     };
 
-    basic_string_ref() :buffer(NULL), len(0) {}
-    basic_string_ref(const CharT* b, size_t l) :buffer(b), len(l) {}
+    basic_string_ref() :strPtr(NULL), len(0) {}
+    basic_string_ref(const CharT* b, size_t l) :strPtr(b), len(l) {}
 
     basic_string_ref& assign(const CharT* b, size_t l) {
-        buffer = b;
+        strPtr = b;
         len = l;
         return *this;
     }
@@ -33,7 +34,7 @@ public:
             return NULL;
         }
 
-        return buffer;
+        return strPtr;
     }
 
     const StringT str() const {
@@ -41,7 +42,7 @@ public:
             return StringT();
         }
 
-        return StringT(buffer, len);
+        return StringT(strPtr, len);
     }
 
     size_t size() const {
@@ -54,17 +55,75 @@ public:
         
 
     const_iterator begin() const {
-        return buffer;
+        return strPtr;
     }
 
     const_iterator end() const {
-        return &buffer[len];
+        return &strPtr[len];
     }
 
     void clear() {
-        buffer = NULL;
+        strPtr = NULL;
         len = 0;
     }
+
+    bool isEqual(const CharT* buffer, size_t bufferLen, bool caseSensitive=false) const {
+        if (strPtr == buffer && bufferLen == len) {
+            return true;
+        }
+        if (0 == len && 0 == bufferLen) {
+            return true;
+        }
+
+        if (len > 0 && bufferLen > 0) {
+            return char_traits::compare(strPtr, buffer, len< bufferLen?len: bufferLen) == 0;
+        }
+
+        return false;
+    }
+
+    const CharT& operator[](const size_t& pos) const {
+        return strPtr[pos];
+    }
+
+    bool operator==(const basic_string_ref<CharT>& rhs) const {
+        return isEqual(rhs.strPtr, rhs.len);
+    }
+
+    bool operator==(const std::basic_string<CharT>& rhs) const {
+        return isEqual(rhs.c_str(), rhs.length());
+    }
+
+    bool operator==(const CharT* rhs) const {
+        return isEqual(rhs, strlen(rhs));
+    }
+
+    bool operator>(const basic_string_ref<CharT>& rhs) const {
+        return char_traits::compare(strPtr, rhs.strPtr, len < rhs.len ? len : rhs.len) > 0;
+    }
+
+    bool operator>(const std::basic_string<CharT>& rhs) const {
+        return char_traits::compare(strPtr, rhs.c_str(), len < rhs.length() ? len : rhs.length()) > 0;
+    }
+
+    bool operator>(const CharT* rhs) const {
+        size_t rhslen = strlen(rhs);
+        return char_traits::compare(strPtr, rhs, len < rhslen ? len : rhslen) > 0;
+    }
+
+    bool operator<(const basic_string_ref<CharT>& rhs) const {
+        return char_traits::compare(strPtr, rhs.strPtr, len < rhs.len ? len : rhs.len) < 0;
+    }
+
+    bool operator<(const std::basic_string<CharT>& rhs) const {
+        return char_traits::compare(strPtr, rhs.c_str(), len < rhs.length() ? len : rhs.length()) < 0;
+    }
+
+    bool operator<(const CharT* rhs) const {
+        size_t rhslen = strlen(rhs);
+        return char_traits::compare(strPtr, rhs, len < rhslen ? len : rhslen) < 0;
+    }
+
 };
 
 

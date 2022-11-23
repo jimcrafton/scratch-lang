@@ -9,38 +9,28 @@
 
 
 #include "Lexer.h"
-
+#include "Parser.h"
 
 
 
 int main(int argc, char** argv)
 {
-    std::string fileText = "";
+    std::string filename = "test.scratch";
 
-    FILE* f = fopen("test.scratch", "rb");
-    if (f) {
-        fseek(f, 0, SEEK_END);
-        size_t fs = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        char* tmp = new char[fs+1];
-        memset(tmp, 0, fs + 1);
-        fread(tmp, 1, fs, f);
-        fileText = tmp;
-        delete[] tmp;
-        fclose(f);
+    Lexer lexer;
+
+    
+    
+    if (!lexer.lex(filename)) {
+        std::cout << "Error at line: " << lexer.currentLine << std::endl;
+        return -1;
     }
-
-    Lexer p;
 
     std::string s = "";
     s.append(80, '-');
     std::cout << s << std::endl;
-    std::cout << fileText << std::endl;
+    std::cout << lexer.currentContext()->text << std::endl;
     std::cout << s << std::endl;
-    
-    if (!p.process(fileText)) {
-        std::cout << "Error at line: " << p.currentLine << std::endl;
-    }
 
 
     s = "";
@@ -75,9 +65,14 @@ int main(int argc, char** argv)
         {Token::COMMENT_START,"COMMENT_START"},
         {Token::COMMENT_END,"COMMENT_END"}
     };
-    for (const Token& t : p.tokens) {
+    for (const Token& t : lexer.currentContext()->tokens) {
         std::cout << ttmap[t.type] << ": '" << t.text.str() << "'" << std::endl;
     }
+
+
+    Parser parser;
+    parser.parse(lexer);
+
     return 0;
 }
 
