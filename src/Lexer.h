@@ -279,7 +279,7 @@ public:
     void processToken(State state)
     {
         currentToken.type = Token::UNKNOWN;
-        currentToken.text.assign(currentText.c_str(), currentLexemeStart, currentLexemeEnd - currentLexemeStart);
+        currentToken.text.assign(currentText.c_str()+ currentLexemeStart, currentLexemeEnd - currentLexemeStart);
         std::string s = currentToken.text.str();
         switch (state) {
             case STRING: {

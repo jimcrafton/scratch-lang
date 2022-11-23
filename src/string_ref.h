@@ -8,8 +8,7 @@ class basic_string_ref {
 public:
     typedef chT CharT;
 protected:
-    const CharT* buffer;
-    size_t pos;
+    const CharT* buffer;    
     size_t len;
 public:
     typedef chT CharT;
@@ -20,41 +19,51 @@ public:
         npos = StringT::npos
     };
 
-    basic_string_ref() :buffer(NULL), pos(0), len(0) {}
-    basic_string_ref(const CharT* b, size_t p, size_t l) :buffer(b), pos(p), len(l) {}
+    basic_string_ref() :buffer(NULL), len(0) {}
+    basic_string_ref(const CharT* b, size_t l) :buffer(b), len(l) {}
 
-    basic_string_ref& assign(const CharT* b, size_t p, size_t l) {
+    basic_string_ref& assign(const CharT* b, size_t l) {
         buffer = b;
-        pos = p;
         len = l;
         return *this;
     }
 
     const CharT* data() const {
+        if (empty()) {
+            return NULL;
+        }
+
         return buffer;
     }
 
     const StringT str() const {
-        return StringT(&buffer[pos], len);
+        if (empty()) {
+            return StringT();
+        }
+
+        return StringT(buffer, len);
     }
 
     size_t size() const {
         return len;
     }
+
     size_t length() const { return len; }
 
-    bool empty() const { len == 0; }
-
-    size_t offset() const {
-        return pos;
-    }
+    bool empty() const { return len == 0; }
+        
 
     const_iterator begin() const {
-        return &buffer[pos];
+        return buffer;
     }
 
     const_iterator end() const {
-        return &buffer[pos + len];
+        return &buffer[len];
+    }
+
+    void clear() {
+        buffer = NULL;
+        len = 0;
     }
 };
 
