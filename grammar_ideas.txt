@@ -15,14 +15,15 @@ eol ::== \r|\n|\r\n
 
 identifier ::== alpha [alpha|digits]+
 
-module ::= 'module' module_info  global_namespace [namespace]+
+module ::= 'module' module_info  global_namespace
 module_info  ::== name [',' version]
 name ::== identifier[dot identifier]+
 version ::== identifier
 
-global_namespace ::== '{' statements '}' 
+global_namespace ::==  '{' (statements|namespace)+   '}' 
 
-namespace ::== identifier '{' statements|namespace '}'
+namespace ::== identifier '{' (statements|namespace)+ '}'
+
 
 statements ::== (statement|comment)+
 
@@ -37,13 +38,23 @@ end_of_statement ::== ';'
 
 statement ::==  expression|assignment end_of_statement
 
+expression ::== send_message | open_paren expression close_paren
+
+open_paren ::== '('
+close_paren ::== ')'
+
 assignment ::== instance assignment-op expression
 
 assignment-op ::== ':='
 
-namespace_name ::== identifier ['.'identifier]+
+send_message ::== instance message|operator-message
+
+instance ::== variable|expression
 
 variable ::== [namespace_name'.']identifier|var_literal
+
+namespace_name ::== identifier ['.'identifier]+
+
 var_literal ::== integer_literal|decimal_literal|binary_literal|hexadecimal_literal|string_literal
 
 integer_literal :==  digits
@@ -52,15 +63,6 @@ hexadecimal_literal  ::== '0x|X' digit|'A..F' [digit|'A..F']+
 binary_literal  ::== '0b|B' 0|1 [0|1]+
 string_literal  ::== '"' [any_char]+ '"'
 
-expression ::== send_message | open_paren expression close_paren
-
-open_paren ::== '('
-close_paren ::== ')'
-
-
-send_message ::== instance message|operator-message
-
-instance ::== variable|expression
 
 message ::== message_name|message_name_params
 message_name ::== identifier
