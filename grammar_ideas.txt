@@ -15,10 +15,12 @@ eol ::== \r|\n|\r\n
 
 identifier ::== alpha [alpha|digits]+
 
-module ::= 'module' module_info  [namespace]+ [statements]+
+module ::= 'module' module_info  global_namespace [namespace]+
 module_info  ::== name [',' version]
 name ::== identifier[dot identifier]+
 version ::== identifier
+
+global_namespace ::== '{' statements '}' 
 
 namespace ::== identifier '{' statements|namespace '}'
 
