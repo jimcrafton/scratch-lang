@@ -43,7 +43,7 @@ expression ::== send_message | open_paren expression close_paren
 open_paren ::== '('
 close_paren ::== ')'
 
-assignment ::== instance assignment-op expression
+assignment ::== instance assignment-op instance
 
 assignment-op ::== ':='
 
