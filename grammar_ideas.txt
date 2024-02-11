@@ -6,23 +6,124 @@ grammar ideas
 alpha ::== A..Z,a..z
 digit ::== 0-9
 digits ::= digit+
-dot  ::== .
-decimal ::== .
+dot  ::== '.'
+decimal ::== '.'
+single_quote  ::== '
+dbl_quote  ::== "
 
 any_char ::== *
 
 eol ::== \r|\n|\r\n
 
-identifier ::== alpha [alpha|digits]+
+identifier ::== alpha [alpha|digits|_]+
 
-module ::= 'module' module_info  [namespace]+ [statements]+
-module_info  ::== name [',' version]
-name ::== identifier[dot identifier]+
-version ::== identifier
 
-namespace ::== identifier '{' statements|namespace '}'
+main types of compilation unit:
+	program
+	library (dynamic/so or static?)
+	module
+	code_fragment_block
 
-statements ::== (statement|comment)+
+programs and libs are made of 1 or more modules
+modules mean source code, lib represent binary, pre-compiled code
+
+
+program ::== 
+	program_module_def
+	imports
+	entry_point
+	code_fragment_block
+
+program_module_def ::== program_id header_info 
+imports  ::== (import_src_module|import_lib_module)+
+entry_point ::== main_message
+
+main_message  ::== 'main' open_block statements_block close_block
+
+library  ::==
+	library_module_def
+	imports
+	entry_point
+	code_fragment_block
+
+library_module_def ::== library_id header_info 
+
+module ::= 
+	module_id header_info 
+	code_fragment_block
+
+header_info ::==  header_identifier [',' version]
+
+header_identifier ::== alpha [alpha|digits|'_'|'.']+
+
+module_id ::== 'module'
+program_id ::== 'program'
+library_id ::== 'lib'
+
+version ::== digits[dot digits]+
+
+imports ::== import_info*
+import_info  ::== import_id module_name_ref|library_name_ref
+import_id  ::== 'import'
+module_name_ref  ::== header_info[',' local_path|remote_url]
+library_name_ref  ::== header_info[',' local_path|remote_url]
+
+remote_url  ::== https url spec
+local_path  ::== [alpha ':']dir_name* file_name
+dir_name  ::== '\' file_name
+file_name  ::== (alpha|digit[alpha|digits|'_'|'.'|' '])+
+
+
+code_fragment_block ::== open_block [namespace_block]+ [statements_block]+ close_block
+
+namespace_block ::== namespace_id identifier open_block statements_block|namespace_block close_block
+namespace_id  ::== 'namespace'
+
+statements_block ::== (class_block|statement|comment)+
+
+
+
+class_block ::== class_id identifier inheritance_id type_decl [implementation_id implementation_types ] 
+	open_block		
+		[scope_block+]
+		[message_block+]
+	close_block
+
+class_id ::== 'class'
+inheritance_id  ::== 'inherits'
+implementation_id  ::== 'implements'
+implementation_types  ::== type_decl [',' type_decl]+
+
+scope_block  ::== scope_type
+	open_block
+		member_variables
+	close_block
+
+member_variables ::== (member_variable end_of_statement)+
+
+member_variable ::== [variable_modifier] identifier ':' type_decl 
+
+scope_type  ::== private_scope_decl | public_scope_decl
+private_scope_decl ::== 'private'
+public_scope_decl ::== 'public'
+variable_modifier  ::== static_modifier
+static_modifier  ::== 'static'
+
+
+message_block ::== message_decl open_block statements_block close_block
+
+message_decl ::== [message_modifier] [type_decl] message_decl_unary | message_decl_binary | message_decl_multi
+message_decl_unary ::== identifier
+message_decl_binary ::== identifier ':' single_param_decl
+message_decl_multi ::== identifier ':' single_param_decl+
+
+single_param_decl ::== identifier ':' type_decl
+message_modifier  ::== static_modifier
+
+type_decl ::== identifier 
+
+
+
 
 comment ::== single_line_comment|multi_line_comment
 single_line_comment :== '#' any_char+  eol
@@ -41,7 +142,8 @@ assignment-op ::== ':='
 
 namespace_name ::== identifier ['.'identifier]+
 
-variable ::== [namespace_name'.']identifier|var_literal
+variable ::== ([namespace_name'.']identifier)|var_literal
+variable_id  ::== ([namespace_name'.']identifier)
 var_literal ::== integer_literal|decimal_literal|binary_literal|hexadecimal_literal|string_literal
 
 integer_literal :==  digits
@@ -50,15 +152,19 @@ hexadecimal_literal  ::== '0x|X' digit|'A..F' [digit|'A..F']+
 binary_literal  ::== '0b|B' 0|1 [0|1]+
 string_literal  ::== '"' [any_char]+ '"'
 
-expression ::== send_message | open_paren expression close_paren
+expression ::== send_message | (open_paren expression close_paren) | (return_id expression)
+return_id ::== 'return'
 
 open_paren ::== '('
 close_paren ::== ')'
 
+open_block ::== '{'
+close_block ::== '}'
+
 
 send_message ::== instance message|operator-message
 
-instance ::== variable|expression
+instance ::== variable_id|expression
 
 message ::== message_name|message_name_params
 message_name ::== identifier
@@ -76,6 +182,7 @@ subtraction-op ::== '-'
 multiplication-op ::==  '*' 
 division-op ::== '/'
 mod-op ::== '%'
+
 
 
 

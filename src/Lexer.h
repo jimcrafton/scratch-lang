@@ -5,6 +5,7 @@
 
 #include "string_ref.h"
 #include "Token.h"
+#include <cstdarg>
 
 
 
@@ -14,17 +15,115 @@ public:
     std::vector<Token> tokens;
     std::vector<size_t> newLines;
     std::string text;
+    mutable std::vector<Token>::const_iterator curTokIt;
 
     void clear() {
         tokens.clear();
         newLines.clear();
         text = "";
     }
+
+    void beginTokens() const  {
+        curTokIt = tokens.begin();
+    }
+
+    const Token& getCurrentToken() const {
+        return *curTokIt;
+    }
+
+    const Token& getCurrentToken(int afterPos) const {
+        auto it = curTokIt+afterPos;
+        return *it;
+    }
+
+    const Token& lastToken() const {
+        auto it = curTokIt + (tokens.size()-1);
+        return *it;
+    }
+
+    bool prevToken() const {        
+
+        if (curTokIt == tokens.begin()) {
+            return false;
+        }
+
+        --curTokIt;
+
+        return true;
+    }
+
+    bool nextToken() const {
+        ++curTokIt;
+
+        if (curTokIt == tokens.end()) {
+            return false;
+        }
+        
+        return true;
+    }
+
+    std::string getLine(size_t pos) const {
+        std::string result;
+
+        size_t startPos = pos;
+        const char* P = text.c_str();
+        P += startPos;
+        while (startPos > 0) {
+            if (*P == '\n') {
+                startPos++;
+                P++;
+                break;
+            }
+            P--;
+            startPos--;
+        }
+
+        size_t endPos = startPos;
+        while (*P != '\n' && *P != '\n') {
+            endPos++;
+            P++;
+        }
+
+        size_t len = (endPos - startPos) < (text.length() - startPos) ?
+            (endPos - startPos) : (text.length() - startPos);
+
+        result = text.substr(startPos, len);
+
+        return result;
+    }
+    
 };
 
-class Lexer {
 
+class Lexer {
 public:
+
+    class Error {
+    public:
+        size_t line = 0;
+        size_t col = 0;
+        size_t offset = 0;
+        std::string message;
+
+        void clear() {
+            line = 0;
+            col = 0;
+            offset = 0;
+            message = "";
+        }
+
+        void output(const Lexer& l) const {
+            std::string errorText = l.currentContext()->getLine(offset);
+            errorText += "\n\n";
+            std::string spacer;
+            if (col > 1) {
+                spacer.append(col - 1, '-');
+            }
+            errorText += spacer + "^" + "\n";
+            std::cout << errorText << "Error: " << message << " at line : " << line << ", " << col << std::endl;
+        }
+    };
+
     bool whitespace(const char& ch)
     {
         return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
@@ -91,7 +190,7 @@ public:
 
     bool assignment(const char& ch)
     {
-        return (ch == ':' || ch == '=');
+        return (colon(ch) && equalsSign(currentCh(1)));
     }
 
     bool strLitQuote(const char& ch)
@@ -106,7 +205,7 @@ public:
         }
 
         if (ch == '\r') {
-            if (currentText()[currentChIndex + 1] == '\n') {
+            if (currentCh(1) == '\n') {
                 return true;
             }
         }
@@ -138,7 +237,7 @@ public:
     {
         return openParen(ch)||closeParen(ch)||openBlock(ch)||
             closeBlock(ch)|| endOfStatement(ch) || isOperator(ch)||
-            comment(ch)|| commentStart(ch) || commentEnd(ch);
+            comment(ch)|| commentStart(ch) || commentEnd(ch) || comma(ch);
     }
 
     bool comment(const char& ch)
@@ -156,6 +255,19 @@ public:
         return ch == '}' && comment(currentCh(1));
     }
 
+    bool comma(const char& ch) {
+        return ch == ',';
+    }
+
+    bool colon(const char& ch) {
+        return ch == ':';
+    }
+
+    bool equalsSign(const char& ch)
+    {
+        return ch == '=';
+    }
+
     enum State {
         NONE = 0,
         WHITESPACE = 1,
@@ -165,6 +277,7 @@ public:
         DECIMAL_DIGIT = 5,
         HEXADECIMAL_DIGIT,
         BINARY_DIGIT,
+        VERSION_DIGIT,
         ADD_OPERATOR,
         SUB_OPERATOR,
         MULT_OPERATOR,
@@ -183,6 +296,9 @@ public:
         COMMENTS,
         COMMENT_OPEN_BRACE,
         COMMENT_CLOSE_BRACE,
+        COMMA,
+        COLON,
+        EQUALS_SIGN,
         ERROR,
         UNKNOWN = 0xFFFFFFFF
     };
@@ -194,20 +310,51 @@ public:
     size_t currentLexemeStart;
     size_t currentLexemeEnd;
     size_t currentLine;    
+    size_t currentCol;
     std::string currentFilename;
     
+    Error lexError;
+
     std::vector<std::string> keywords;
     std::string reservedCharacters;
 
     FileContext* currentCtx;
     std::map<std::string,FileContext> files;
 
-    Lexer() : currentChIndex(0), currentLexemeStart(0), currentLexemeEnd(0), currentLine(0), currentCtx(NULL){
+    Lexer() : currentChIndex(0), currentLexemeStart(0), currentLexemeEnd(0), currentLine(0), currentCol(0),currentCtx(NULL){
         stateStack.push_back(NONE);
-        keywords = { "if", "else", "true", "false", "module", "namespace"};
-        reservedCharacters = "()[]{};+-/*";
+        initKeywords();
+        initReservedCharacters();
     }
     ~Lexer() {}
+
+    void initReservedCharacters() {
+        reservedCharacters = "()[]{};+-/*:";
+    }
+
+    void initKeywords() {
+        keywords = { "if", 
+            "else", 
+            "true", 
+            "false",             
+            "main",
+            "module",
+            "program",
+            "lib",
+            "import",
+            "namespace",
+            "class",
+            "inherits",
+            "implements",
+            "private",
+            "public",
+            "static",
+            "return"
+        };
+    }
+
+
+    const Error& getError() const { return lexError; }
 
     std::string& currentText() {
         FileContext* fc = currentContext();
@@ -250,29 +397,60 @@ public:
         return result;
     }
 
+
     State currentState() const {
         return stateStack.back();
     }
 
-    const char& currentCh(int offset = 0) const {
-        size_t pos = currentChIndex;
+    size_t getPosFromOffset(int offset) const {
+        size_t result = currentChIndex;
         if ((offset < 0) && (abs(offset) >= currentChIndex)) {
-            pos = 0;
+            result = 0;
         }
         else if ((offset > 0) && (currentChIndex + offset >= currentText().size())) {
-            pos = currentText().size() - 1;
+            result = currentText().size() - 1;
         }
         else {
-            pos = currentChIndex + offset;
+            result = currentChIndex + offset;
         }
+        return result;
+    }
+
+    const char& currentCh(int offset = 0) const {
+        size_t pos = getPosFromOffset(offset);
         return currentText()[pos];
     }
 
+    std::string getCurrentText(int startOffset, int endOffset) {
+        std::string result;
+
+        size_t startPos = getPosFromOffset(startOffset);
+        size_t endPos = getPosFromOffset(endOffset);
+
+        if (startPos >= endPos) {
+            printf("Error, %zu >= %zu\n", startPos, endPos);
+            return result;
+        }
+
+        result = currentText().substr(startPos, endPos - startPos);
+
+        return result;
+    }
+
+    std::string getCurrentLine() const {
+
+        return currentContext()->getLine(getPosFromOffset(0));
+    }
+
+    
     void processWhiteSpace(const char& ch) {
 
         if (isNewLine(ch)) {
-            currentContext()->newLines.push_back(currentChIndex);
-            currentLine++;
+            if (!(ch == '\n' && currentText()[currentChIndex - 1] == '\r')) {
+                currentContext()->newLines.push_back(currentChIndex);
+                currentLine++;
+                currentCol = 0;
+            }
         }
     }
     //1 based array
@@ -284,8 +462,12 @@ public:
     void processToken(State state)
     {
         currentToken.type = Token::UNKNOWN;
+        currentToken.lineNumber = currentLine;
+        currentToken.colNumber = currentCol;
         currentToken.text.assign(currentText().c_str() + currentLexemeStart, currentLexemeEnd - currentLexemeStart);
-        std::string s = currentToken.text.str();
+        currentToken.offset = currentLexemeStart;
+        currentToken.filename = currentFilename;
+
         switch (state) {
             case STRING: {
                 currentToken.type = Token::STRING_LITERAL;
@@ -352,6 +534,7 @@ public:
 
             case ASSIGNMENT: {
                 currentToken.type = Token::ASSIGMENT_OPERATOR;
+                popState();
             }
             break;
 
@@ -364,6 +547,9 @@ public:
                         currentToken.type = Token::BOOLEAN_LITERAL;
                     }
                 }
+                if (state == A_Z_DIGIT) {
+                    popState();
+                }
             }
             break;
 
@@ -375,23 +561,56 @@ public:
             case COMMENT_CLOSE_BRACE: {
                 currentToken.type = Token::COMMENT_END;
             }
-                                   break;
+            break;
 
             case COMMENTS: {
                 currentToken.type = Token::COMMENT;
             }
             break;
+
+            case COMMA: {
+                currentToken.type = Token::COMMA;
+                popState();
+            }
+            break;
+
+            case COLON: {
+                currentToken.type = Token::COLON;
+                clearState();
+            }
+            break;
+
+            case VERSION_DIGIT: {
+                currentToken.type = Token::VERSION_LITERAL;
+                clearState();
+            }
+            break;
         }
         popState();
-        currentLexeme = "";
-
+        currentLexeme = "";        
         currentContext()->tokens.push_back(currentToken);
     }
 
-    void error()
+    void error_va(const char& ch, const std::string& errString, va_list arg)
     {
+        char errbuf[1024];
+        vsnprintf(errbuf, sizeof(errbuf) - 1, errString.c_str(), arg);
+
         clearState();
-        pushState(ERROR);
+        lexError.clear();
+        
+        lexError.line = currentLine;
+        lexError.col = currentCol - 1;
+        lexError.offset = currentChIndex;
+        lexError.message = errbuf;
+    }
+
+    void error( const char& ch, std::string errString ...)
+    {
+        va_list args;
+        va_start(args, errString);
+        error_va(ch, errString, args);
+        va_end(args);
     }
 
     bool processCharacter(const char& ch) {
@@ -427,10 +646,12 @@ public:
                     pushState(END_OF_STATEMENT);
                     reprocessCh = true;
                 }
-                else if (assignment(ch)) {
-                    pushState(ASSIGNMENT);
+                /*else if (assignment(ch)) {
+                    
                     reprocessCh = true;
                 }
+                */
+                
                 else if (strLitQuote(ch)) {
                     pushState(STRING);
                 }
@@ -453,6 +674,22 @@ public:
                 else if (comment(ch)) {
                     pushState(COMMENTS);                    
                 }
+                else if (equalsSign(ch)) {
+                    pushState(EQUALS_SIGN);
+                    reprocessCh = true;
+                }
+                else if (colon(ch)) {
+                    pushState(COLON);
+                    reprocessCh = true;
+                }
+                else if (comma(ch)) {
+                    pushState(COMMA);
+                    reprocessCh = true;
+                }
+                else {
+                    error(ch, "Unknown lex state for character: %c", ch);
+                    return false;
+                }
             }
             break;
 
@@ -468,27 +705,33 @@ public:
             break;
 
             case A_Z: {
-                if (digit(ch)) {
+                if (alpha(ch)) {
+                    appendToLexeme = true;
+                }
+                else if (digit(ch)) {
                     pushState(A_Z_DIGIT);
                     reprocessCh = true;
                 }
                 else if (ch == '.') {
                     appendToLexeme = true;
                 }
-                else if (ch == ':') {
-                    appendToLexeme = true;
+                else if (colon(ch)) {                    
+                    appendToLexeme = false;
                     tokenReady = true;
+                    reprocessCh = true;
+                }
+                else if (comma(ch)) {                    
+                    appendToLexeme = false;
+                    tokenReady = true;
+                    reprocessCh = true;
                 }
                 else if (whitespace(ch) || reservedCh(ch)) {
                     tokenReady = true;
                     reprocessCh = !whitespace(ch);
-                }
-                else if (alpha(ch)) {
-                    appendToLexeme = true;
-                }
+                }                
                 else {
-                    error();
-                    result = processCharacter(ch);
+                    error(ch, "Invalid alphabet char, not in A-z or a-z" );
+                    return false;
                 }
             }
             break;
@@ -497,9 +740,16 @@ public:
                 if (ch == '.') {
                     appendToLexeme = true;
                 }
-                else if (ch == ':') {
-                    appendToLexeme = true;
+                else if (colon(ch)) {
+                    pushState(COLON);
+                    appendToLexeme = false;
                     tokenReady = true;
+                    reprocessCh = true;
+                }
+                else if (comma(ch)) {                    
+                    appendToLexeme = false;
+                    tokenReady = true;
+                    reprocessCh = true;
                 }
                 else if (whitespace(ch) || reservedCh(ch)) {
                     tokenReady = true;
@@ -509,8 +759,8 @@ public:
                     appendToLexeme = true;
                 }
                 else {
-                    error();
-                    result = processCharacter(ch);
+                    error(ch, "Invalid alpha num char, not in A-z or a-z or 0-9");
+                    return false;
                 }
             }
             break;
@@ -536,8 +786,26 @@ public:
                     reprocessCh = !whitespace(ch);
                 }
                 else {
-                    error();
-                    result = processCharacter(ch);
+                    error(ch, "Invalid digits char, not in 0 - 9 or starting with 0X|x, 0B|b");
+                    return false;
+                }
+            }
+            break;
+
+            case VERSION_DIGIT: {
+                if (digit(ch)) {
+                    appendToLexeme = true;
+                }
+                else if (ch == '.') {
+                    appendToLexeme = true;
+                }
+                else if (whitespace(ch) || reservedCh(ch)) {
+                    tokenReady = true;
+                    reprocessCh = !whitespace(ch);
+                }
+                else {
+                    error(ch, "Invalid version char, not in 0 - 9 or '.'");
+                    return false;
                 }
             }
             break;
@@ -546,13 +814,17 @@ public:
                 if (digit(ch)) {
                     appendToLexeme = true;
                 }
+                else if (ch == '.') {
+                    pushState(VERSION_DIGIT);
+                    appendToLexeme = true;
+                }
                 else if (whitespace(ch) || reservedCh(ch)) {
                     tokenReady = true;
                     reprocessCh = !whitespace(ch);
                 }
                 else {
-                    error();
-                    result = processCharacter(ch);
+                    error(ch, "Invalid decimal char, not in 0 - 9 or '.'");
+                    return false;
                 }
             }
             break;
@@ -566,8 +838,8 @@ public:
                     reprocessCh = !whitespace(ch);
                 }
                 else {
-                    error();
-                    result = processCharacter(ch);
+                    error(ch, "Invalid hexadecimal char, not in 0 - 9 or A-F or starting with 0X|x");
+                    return false;
                 }
             }
             break;
@@ -581,8 +853,8 @@ public:
                     reprocessCh = !whitespace(ch);
                 }
                 else {
-                    error();
-                    result = processCharacter(ch);
+                    error(ch, "Invalid binary char, not in 0 - 1 or starting with 0B|b");
+                    return false;
                 }
             }
             break;
@@ -633,18 +905,54 @@ public:
             }
             break;
 
+            case COMMA: {
+                appendToLexeme = true;
+                tokenReady = true;
+            }
+            break;
+
             case CLOSE_BRACE: {
                 appendToLexeme = true;
                 tokenReady = true;
             }
             break;
 
-            case ASSIGNMENT: {
-                if (!assignment(ch)) {
+            case COLON: {
+                if (equalsSign(ch)) {
+                    pushState(ASSIGNMENT);
+                    reprocessCh = true;
+                    appendToLexeme = true;
+                    tokenReady = false;
+                }
+                else if (colon(ch) ) {
+                    appendToLexeme = true;
+                }
+                else if (whitespace(ch)) {
                     tokenReady = true;
                 }
                 else {
+                    error(ch, "Expected '=' char");
+                    return false;
+                }
+            }
+            break;
+            
+
+            case ASSIGNMENT: {
+                if (colon(ch) ) {
                     appendToLexeme = true;
+                }
+                else if (equalsSign(ch) && colon(currentCh(-1)) ) {
+                    appendToLexeme = true;
+                    tokenReady = true;
+                }
+                else if (colon(currentCh(-1)) && !equalsSign(ch)) {
+                    error(ch, "Expected '=' char, looks like assignment was intended?");
+                    return false;
+                }
+                else {
+                    error(ch, "Expected ':=' sequence, looks like assignment was intended?");
+                    return false;
                 }
             }
             break;
@@ -675,17 +983,18 @@ public:
                     tokenReady = true;
                 }
                 else {
-                    error();
-                    result = processCharacter(ch);
+                    error(ch, "Expected closing brace '}'");
+                    return false;
                 }
             }
             break;
             
 
-            case ERROR: {
-                result = false;
+            default: {
+                //no idea, assume error
+                error(ch, "unhandled character '%c'", ch);
+                return false;
             }
-            break;
         }
 
         if (appendToLexeme) {
@@ -725,7 +1034,18 @@ public:
         currentLexemeStart = 0;
         currentLexemeEnd = 0;
         currentLine = 1;
+        currentCol = 0;
         clearState();
+        lexError.clear();
+    }
+
+    void incrChIdx() {
+        ++currentChIndex;
+        ++currentCol;
+    }
+
+    bool hasMoreText() const {
+        return currentChIndex < currentText().size();
     }
 
     bool lex(const std::string& fileName) {
@@ -759,13 +1079,15 @@ public:
 
         currentContext()->text = text;
 
-        while (currentChIndex < currentText().size()) {
+        while (hasMoreText()) {
             const char& ch = currentText()[currentChIndex];
             if (!processCharacter(ch)) {
                 return false;
             }
-            currentChIndex++;
+            incrChIdx();
         }
+
+        currentContext()->beginTokens();
 
         return true;
     }

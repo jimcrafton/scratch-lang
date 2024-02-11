@@ -82,6 +82,15 @@ public:
         return false;
     }
 
+    
+    const CharT& front() const {
+        return strPtr[0];
+    }
+
+    const CharT& back() const {
+        return strPtr[len-1];
+    }
+
     const CharT& operator[](const size_t& pos) const {
         return strPtr[pos];
     }
@@ -90,12 +99,24 @@ public:
         return isEqual(rhs.strPtr, rhs.len);
     }
 
+    bool operator!=(const basic_string_ref<CharT>& rhs) const {
+        return !isEqual(rhs.strPtr, rhs.len);
+    }
+
     bool operator==(const std::basic_string<CharT>& rhs) const {
         return isEqual(rhs.c_str(), rhs.length());
     }
 
+    bool operator!=(const std::basic_string<CharT>& rhs) const {
+        return !isEqual(rhs.c_str(), rhs.length());
+    }
+
     bool operator==(const CharT* rhs) const {
         return isEqual(rhs, strlen(rhs));
+    }
+
+    bool operator!=(const CharT* rhs) const {
+        return !isEqual(rhs, strlen(rhs));
     }
 
     bool operator>(const basic_string_ref<CharT>& rhs) const {

@@ -1,5 +1,13 @@
 
-module stuff
+module stuff, 12.3.1 {
+
+x := 4 + u;
+
+dd := 255.721 + d;
+
+
+
+dofigudofigu
 
 namespace foobar {
 
@@ -39,3 +47,11 @@ bb := 0B101101101;
 
 x := true + 12;
 
+
+class Foobar {
+	private {
+	  junk:int32;
+	}
+}
+
+}

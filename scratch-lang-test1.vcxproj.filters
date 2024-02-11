@@ -13,6 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="tests">
+      <UniqueIdentifier>{54bf65b8-8584-47fd-be96-4bca8e579d31}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="grammar">
+      <UniqueIdentifier>{2e8cb90e-9507-43a2-9033-92f93a842839}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\string_ref.h">
@@ -24,10 +30,23 @@
     <ClInclude Include="src\Parser.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Token.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\scratch-lang-test1.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="tests\test1.scratch">
+      <Filter>tests</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="grammar_ideas.txt">
+      <Filter>grammar</Filter>
+    </Text>
   </ItemGroup>
 </Project>

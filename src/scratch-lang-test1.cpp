@@ -15,14 +15,14 @@
 
 int main(int argc, char** argv)
 {
-    std::string filename = "test.scratch";
+    std::string filename = "tests/test3.scratch";
 
     Lexer lexer;
 
     
     
     if (!lexer.lex(filename)) {
-        std::cout << "Error at line: " << lexer.currentLine << std::endl;
+        lexer.getError().output(lexer);
         return -1;
     }
 
@@ -55,15 +55,19 @@ int main(int argc, char** argv)
         {Token::MOD_OPERATOR,"MOD_OPERATOR"},
         {Token::IDENTIFIER,"IDENTIFIER"},
         {Token::BOOLEAN_LITERAL,"BOOLEAN_LITERAL"},
-        {Token::KEYWORD,"KEYWORD"},
-        {Token::MESSAGE_SIGNATURE,"MESSAGE_SIGNATURE"},
+        {Token::KEYWORD,"KEYWORD"},        
         {Token::OPEN_PAREN,"OPEN_PAREN"},
         {Token::CLOSE_PAREN,"CLOSE_PAREN"},
         {Token::OPEN_BLOCK,"OPEN_BLOCK"},
         {Token::CLOSE_BLOCK,"CLOSE_BLOCK"},
         {Token::COMMENT,"COMMENT"},
         {Token::COMMENT_START,"COMMENT_START"},
-        {Token::COMMENT_END,"COMMENT_END"}
+        {Token::COMMENT_END,"COMMENT_END"},
+        {Token::COMMA,"COMMA"},
+        {Token::COLON,"COLON"},
+        {Token::EQUALS_SIGN,"EQUALS_SIGN"},
+        
+        {Token::VERSION_LITERAL,"VERSION_LITERAL"}
     };
     for (const Token& t : lexer.currentContext()->tokens) {
         std::cout << ttmap[t.type] << ": '" << t.text.str() << "'" << std::endl;
@@ -71,7 +75,26 @@ int main(int argc, char** argv)
 
 
     Parser parser;
-    parser.parse(lexer);
+
+    try {
+        parser.parse(lexer);
+
+        s = "";
+        s.append(80, '*');
+        std::cout << "Printing AST" << std::endl;
+        std::cout << s << std::endl;
+        parser.ast.print();
+        std::cout << s << std::endl;
+    }
+    catch (const ParseError& e) {
+        s = "";
+        s.append(80, '*');
+        std::cout << s << std::endl;
+        e.output();
+        std::cout << s << std::endl;
+    }
+    
+    
 
     return 0;
 }
