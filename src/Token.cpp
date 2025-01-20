@@ -1,0 +1,36 @@
+#include "Token.h"
+
+
+
+const std::map< Token::Type, std::string> Token::tokenNames = {
+        { Token::UNKNOWN, "UNKNOWN" },
+        { Token::INTEGER_LITERAL, "INTEGER_LITERAL" },
+        { Token::DECIMAL_LITERAL, "DECIMAL_LITERAL" },
+        { Token::HEXADECIMAL_LITERAL, "HEXADECIMAL_LITERAL" },
+        { Token::BINARY_LITERAL, "BINARY_LITERAL" },
+        { Token::BOOLEAN_LITERAL, "BOOLEAN_LITERAL" },
+        { Token::STRING_LITERAL, "STRING_LITERAL" },
+        { Token::END_OF_STATEMENT, "END_OF_STATEMENT" },
+        { Token::ASSIGMENT_OPERATOR, "ASSIGMENT_OPERATOR" },
+        { Token::ADDITION_OPERATOR, "ADDITION_OPERATOR" },
+        { Token::SUBTRACTION_OPERATOR, "SUBTRACTION_OPERATOR" },
+        { Token::MULT_OPERATOR, "MULT_OPERATOR" },
+        { Token::DIV_OPERATOR, "DIV_OPERATOR" },
+        { Token::MOD_OPERATOR, "MOD_OPERATOR" },
+        { Token::IDENTIFIER, "IDENTIFIER" },
+        { Token::KEYWORD, "KEYWORD" },
+        { Token::OPEN_PAREN, "OPEN_PAREN" },
+        { Token::CLOSE_PAREN, "CLOSE_PAREN" },
+        { Token::OPEN_BLOCK, "OPEN_BLOCK" },
+        { Token::CLOSE_BLOCK, "CLOSE_BLOCK" },
+        { Token::OPEN_BRACKET, "OPEN_BRACKET" },
+        { Token::CLOSE_BRACKET, "CLOSE_BRACKET" },
+        { Token::COMMENT, "COMMENT" },
+        { Token::COMMENT_START, "COMMENT_START" },
+        { Token::COMMENT_END, "COMMENT_END" },
+        { Token::COMMA, "COMMA" },
+        { Token::COLON, "COLON" },
+        { Token::EQUALS_SIGN, "EQUALS_SIGN" },
+        { Token::VERSION_LITERAL, "VERSION_LITERAL", },
+        { Token::AT_SIGN, "AT_SIGN", },
+};

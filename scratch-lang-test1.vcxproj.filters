@@ -33,14 +33,35 @@
     <ClInclude Include="src\Token.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Compiler.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Runtime.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\scratch-lang-test1.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Token.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\compiler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="tests\test1.scratch">
+      <Filter>tests</Filter>
+    </None>
+    <None Include="tests\test2.scratch">
+      <Filter>tests</Filter>
+    </None>
+    <None Include="tests\test3.scratch">
       <Filter>tests</Filter>
     </None>
   </ItemGroup>

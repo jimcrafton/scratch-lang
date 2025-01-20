@@ -23,6 +23,10 @@ public:
         text = "";
     }
 
+    size_t tokenCount() const {
+        return tokens.size();
+    }
+
     void beginTokens() const  {
         curTokIt = tokens.begin();
     }
@@ -37,7 +41,7 @@ public:
     }
 
     const Token& lastToken() const {
-        auto it = curTokIt + (tokens.size()-1);
+        auto it = tokens.begin() + (tokens.size()-1);
         return *it;
     }
 
@@ -59,6 +63,50 @@ public:
             return false;
         }
         
+        return true;
+    }
+
+    bool peekNextToken(Token& t) const {
+        auto tmp = curTokIt;
+        ++tmp;
+        if (tmp == tokens.end()) {
+            return false;
+        }
+        else {
+            t = *tmp;
+        }
+
+        return true;
+    }
+
+
+    bool peekNextTokens(size_t tokenCount, std::vector<Token>& nextTokens) const {
+        nextTokens.clear();
+        auto tmp = curTokIt;
+        for (size_t i = 0;i < tokenCount;i++) {
+            ++tmp;
+            if (tmp == tokens.end()) {
+                return false;
+            }
+            else {
+                nextTokens.push_back(*tmp);
+            }
+        }        
+
+        return !nextTokens.empty();
+    }
+
+    bool peekPrevToken(Token& t) const {
+        auto tmp = curTokIt;
+        
+        if (tmp == tokens.begin()) {
+            return false;
+        }
+        else {
+            --tmp;
+            t = *tmp;
+        }
+
         return true;
     }
 
@@ -120,7 +168,7 @@ public:
                 spacer.append(col - 1, '-');
             }
             errorText += spacer + "^" + "\n";
-            std::cout << errorText << "Error: " << message << " at line : " << line << ", " << col << std::endl;
+            std::cout << errorText << "Lexical error: " << message << " at line : " << line << ", " << col << std::endl;
         }
     };
 
@@ -223,6 +271,16 @@ public:
         return (ch == '}');
     }
 
+    bool openBracket(const char& ch)
+    {
+        return (ch == '[');
+    }
+
+    bool closeBracket(const char& ch)
+    {
+        return (ch == ']');
+    }
+
     bool openParen(const char& ch)
     {
         return (ch == '(');
@@ -233,10 +291,16 @@ public:
         return (ch == ')');
     }
 
+    bool atSign(const char& ch)
+    {
+        return (ch == '@');
+    }
+
     bool reservedCh(const char& ch)
     {
         return openParen(ch)||closeParen(ch)||openBlock(ch)||
-            closeBlock(ch)|| endOfStatement(ch) || isOperator(ch)||
+            closeBlock(ch)|| openBracket(ch) ||
+            closeBracket(ch) || endOfStatement(ch) || isOperator(ch)||
             comment(ch)|| commentStart(ch) || commentEnd(ch) || comma(ch);
     }
 
@@ -299,6 +363,7 @@ public:
         COMMA,
         COLON,
         EQUALS_SIGN,
+        AT_SIGN,
         ERROR,
         UNKNOWN = 0xFFFFFFFF
     };
@@ -313,7 +378,7 @@ public:
     size_t currentCol;
     std::string currentFilename;
     
-    Error lexError;
+    
 
     std::vector<std::string> keywords;
     std::string reservedCharacters;
@@ -329,7 +394,7 @@ public:
     ~Lexer() {}
 
     void initReservedCharacters() {
-        reservedCharacters = "()[]{};+-/*:";
+        reservedCharacters = "()[]{};+-/*:@";
     }
 
     void initKeywords() {
@@ -352,9 +417,6 @@ public:
             "return"
         };
     }
-
-
-    const Error& getError() const { return lexError; }
 
     std::string& currentText() {
         FileContext* fc = currentContext();
@@ -532,8 +594,24 @@ public:
             }
             break;
 
+            case OPEN_BRACKET: {
+                currentToken.type = Token::OPEN_BRACKET;
+            }
+            break;
+
+            case CLOSE_BRACKET: {
+                currentToken.type = Token::CLOSE_BRACKET;
+            }
+            break;
+
             case ASSIGNMENT: {
                 currentToken.type = Token::ASSIGMENT_OPERATOR;
+                popState();
+            }
+            break;
+
+            case AT_SIGN: {
+                currentToken.type = Token::AT_SIGN;
                 popState();
             }
             break;
@@ -597,12 +675,14 @@ public:
         vsnprintf(errbuf, sizeof(errbuf) - 1, errString.c_str(), arg);
 
         clearState();
-        lexError.clear();
+
+        Error lexError;
         
         lexError.line = currentLine;
         lexError.col = currentCol - 1;
         lexError.offset = currentChIndex;
         lexError.message = errbuf;
+        throw lexError;
     }
 
     void error( const char& ch, std::string errString ...)
@@ -645,13 +725,7 @@ public:
                 else if (endOfStatement(ch)) {
                     pushState(END_OF_STATEMENT);
                     reprocessCh = true;
-                }
-                /*else if (assignment(ch)) {
-                    
-                    reprocessCh = true;
-                }
-                */
-                
+                }                
                 else if (strLitQuote(ch)) {
                     pushState(STRING);
                 }
@@ -673,6 +747,18 @@ public:
                 }
                 else if (comment(ch)) {
                     pushState(COMMENTS);                    
+                }
+                else if (atSign(ch)) {
+                    pushState(AT_SIGN);
+                    reprocessCh = true;
+                }
+                else if (openBracket(ch)) {
+                    pushState(OPEN_BRACKET);
+                    reprocessCh = true;
+                }
+                else if (closeBracket(ch)) {
+                    pushState(CLOSE_BRACKET);
+                    reprocessCh = true;
                 }
                 else if (equalsSign(ch)) {
                     pushState(EQUALS_SIGN);
@@ -917,6 +1003,24 @@ public:
             }
             break;
 
+            case OPEN_BRACKET: {
+                appendToLexeme = true;
+                tokenReady = true;
+            }
+            break;
+
+            case CLOSE_BRACKET: {
+                appendToLexeme = true;
+                tokenReady = true;
+            }
+            break;
+
+            case AT_SIGN: {
+                appendToLexeme = true;
+                tokenReady = true;
+            }
+            break;
+
             case COLON: {
                 if (equalsSign(ch)) {
                     pushState(ASSIGNMENT);
@@ -931,8 +1035,10 @@ public:
                     tokenReady = true;
                 }
                 else {
-                    error(ch, "Expected '=' char");
-                    return false;
+                    //error(ch, "Expected '=' char");
+                    //return false;
+                    tokenReady = true;
+                    reprocessCh = true;
                 }
             }
             break;
@@ -943,7 +1049,7 @@ public:
                     appendToLexeme = true;
                 }
                 else if (equalsSign(ch) && colon(currentCh(-1)) ) {
-                    appendToLexeme = true;
+                    appendToLexeme = false;
                     tokenReady = true;
                 }
                 else if (colon(currentCh(-1)) && !equalsSign(ch)) {
@@ -992,6 +1098,7 @@ public:
 
             default: {
                 //no idea, assume error
+                currentCol++;
                 error(ch, "unhandled character '%c'", ch);
                 return false;
             }
@@ -1036,7 +1143,6 @@ public:
         currentLine = 1;
         currentCol = 0;
         clearState();
-        lexError.clear();
     }
 
     void incrChIdx() {
@@ -1063,7 +1169,7 @@ public:
             fclose(f);
         }
         else {
-            return false;
+            
         }
 
 

@@ -1,7 +1,10 @@
 
+#pragma once
+
 #ifndef _STRING_REF_H__
 #define _STRING_REF_H__
 
+#include <string>
 
 template<typename chT>
 class basic_string_ref {
