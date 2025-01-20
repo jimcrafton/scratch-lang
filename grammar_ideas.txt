@@ -136,9 +136,20 @@ end_of_statement ::== ';'
 
 statement ::==  expression|variable_def|assignment end_of_statement
 
-assignment ::== instance assignment-op expression
+expression ::== send_message | open_paren expression close_paren
+
+open_paren ::== '('
+close_paren ::== ')'
+
+assignment ::== instance assignment-op instance
 
 assignment-op ::== ':='
+
+send_message ::== instance message|operator-message
+
+instance ::== variable|expression
+
+variable ::== [namespace_name'.']identifier|var_literal
 
 namespace_name ::== identifier ['.'identifier]+
 
