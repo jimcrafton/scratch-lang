@@ -20,4 +20,16 @@ idea here is to be a little more pragmatic, not everything is an object. Primiti
 It's the Compiler class's job to manage this, to determing if a message is going to soemthing that is really any "object" instance, or 
 if it's dealing with a primitive. If it's a primitive then the message would be interpreted essentially the same as a function call in C 
 or anything else. If the message is sent to an object the Compiler needs to figure out if the message can be resolved at compiler time,
-in which case it
+in which case it would act basically like a direct function call(?). If it can't then it needs to be handled at runtime. If it's handled 
+at runtime, then this is where the Runtime class would kick in?
+If a class Foobar is defined with a single message called incr, and it has no subclasses that override this message, then
+
+f:Foobar := Foobar ;
+
+f incr;
+
+Sending a message "incr" to instance f can be thought of as basically a straight function call. If this were not the case then the resolution of 
+what to call would have to wait till runtime and would walk the chain of inherited classes until someone responds to it, or it fails.
+
+
+
