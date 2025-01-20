@@ -70,7 +70,7 @@ library_name_ref  ::== header_info[',' local_path|remote_url]
 
 remote_url  ::== https url spec
 local_path  ::== [alpha ':']dir_name* file_name
-dir_name  ::== '\' file_name
+dir_name  ::== '/'|'\' file_name
 file_name  ::== (alpha|digit[alpha|digits|'_'|'.'|' '])+
 
 
@@ -115,7 +115,7 @@ message_block ::== message_decl open_block statements_block close_block
 message_decl ::== [message_modifier] [type_decl] message_decl_unary | message_decl_binary | message_decl_multi
 message_decl_unary ::== identifier
 message_decl_binary ::== identifier ':' single_param_decl
-message_decl_multi ::== identifier ':' single_param_decl+
+message_decl_multi ::== identifier ':' single_param_decl (',' single_param_decl)+
 
 single_param_decl ::== identifier ':' type_decl
 message_modifier  ::== static_modifier
@@ -134,7 +134,7 @@ end_comments  ::==  '}#'
 
 end_of_statement ::== ';'
 
-statement ::==  expression|assignment end_of_statement
+statement ::==  expression|variable_def|assignment end_of_statement
 
 assignment ::== instance assignment-op expression
 
@@ -142,17 +142,26 @@ assignment-op ::== ':='
 
 namespace_name ::== identifier ['.'identifier]+
 
-variable ::== ([namespace_name'.']identifier)|var_literal
+qualifier  ::== namespace_name '.'
+
+variable ::== ([qualifier]identifier)|var_literal
+variable_def  ::==  ([qualifier]identifier) ':' type_def
+type_def  ::== ([qualifier]identifier)
+
 variable_id  ::== ([namespace_name'.']identifier)
-var_literal ::== integer_literal|decimal_literal|binary_literal|hexadecimal_literal|string_literal
+var_literal ::== integer_literal|decimal_literal|binary_literal|hexadecimal_literal|string_literal|array_literal
 
 integer_literal :==  digits
 decimal_literal ::== digits [decimal digits]
 hexadecimal_literal  ::== '0x|X' digit|'A..F' [digit|'A..F']+
 binary_literal  ::== '0b|B' 0|1 [0|1]+
 string_literal  ::== '"' [any_char]+ '"'
+array_literal  ::== open_bracket [instance][',' instance]+ close_bracket   i.e. "[]", "[1]", or "[1,4,5]"
 
-expression ::== send_message | (open_paren expression close_paren) | (return_id expression)
+expression ::== send_message | group_expression | (return_id expression)
+
+group_expression  ::== open_paren expression close_paren
+
 return_id ::== 'return'
 
 open_paren ::== '('
@@ -161,10 +170,12 @@ close_paren ::== ')'
 open_block ::== '{'
 close_block ::== '}'
 
+open_bracket ::== '['
+close_bracket ::== ']'
 
 send_message ::== instance message|operator-message
 
-instance ::== variable_id|expression
+instance ::== variable_id|variable_def|var_literal|expression
 
 message ::== message_name|message_name_params
 message_name ::== identifier
