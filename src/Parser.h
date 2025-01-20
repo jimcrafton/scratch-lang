@@ -631,7 +631,13 @@ public:
 	bool lookAhead(Token::Type* types, size_t typesSize, const FileContext& ctx)
 	{
 		std::vector<Token> tokens;
-		if (!peekNext(ctx, typesSize, tokens)) {
+		prevToken(ctx);
+
+		bool res = peekNext(ctx, typesSize, tokens);
+
+		nextToken(ctx, NULL, false);
+
+		if (!res) {
 			return false;
 		}
 
@@ -798,26 +804,27 @@ public:
 		result->name = tok.text.str();
 
 		nextToken(ctx, parent);
+
+		verifyTokenTypeOrFail(ctx.getCurrentToken(),
+			Token::COLON,
+			ctx,
+			"Parsing variable definition, expected colon",
+			result);
+		
+
+		nextToken(ctx, result);
 		tok = ctx.getCurrentToken();
-		if (tok.type == Token::COLON) {
-			nextToken(ctx, result);
-			tok = ctx.getCurrentToken();
 
-			verifyTokenTypeOrFail(tok,
-				Token::IDENTIFIER,
-				ctx,
-				"Parsing variable, expected identifier for type",
-				result);
+		verifyTokenTypeOrFail(tok,
+			Token::IDENTIFIER,
+			ctx,
+			"Parsing variable, expected identifier for type",
+			result);
 
 
-			result->type = tok.text.str();
+		result->type = tok.text.str();
 
-		}
-
-		else {
-			//???
-		//	error(ctx.getCurrentToken(), ctx, "Parsing variable, invalid syntax?", result);
-		}
+		
 
 
 		return result;
@@ -839,41 +846,21 @@ public:
 
 		Token::Type types[] = { Token::IDENTIFIER, Token::COLON, Token::IDENTIFIER};
 		
-		lookAhead(types, sizeof(types) / sizeof(types[0]), ctx);
-
-
-		vector<Token> tokens;
-		if (peekNext(ctx, 2, tokens)) {
-			if (tokens[0].type == Token::COLON && )
+		if (lookAhead(types, sizeof(types) / sizeof(types[0]), ctx)) {
+			result = variableDef(ctx, parent);
 		}
-
-
-		result = new VariableNode();
-		result->parent = parent;
-
-		result->name = tok.text.str();
-		
-		nextToken(ctx, parent);
-		tok = ctx.getCurrentToken();
-		if (tok.type == Token::COLON) {
-			nextToken(ctx, result);
-			tok = ctx.getCurrentToken();
-
-			verifyTokenTypeOrFail(tok,
-				Token::IDENTIFIER,
-				ctx,
-				"Parsing variable, expected identifier for type",
-				result);
-
-			
-			result->type = tok.text.str();
-
-		}
-
 		else {
-			//???
-		//	error(ctx.getCurrentToken(), ctx, "Parsing variable, invalid syntax?", result);
+			result = new VariableNode();
+			result->parent = parent;
+
+			result->name = tok.text.str();
+
 		}
+
+
+
+
+		
 
 
 		return result;
@@ -1172,19 +1159,16 @@ public:
 				//could be a var definition (i.e. foo:int8) 
 				//or could be assignment ( foo:int8 := 99)
 				//check for tyerminating ';' char
-				vector<Token> tokens;
-				peekNext(ctx, tokens);
+				Token::Type types[] = {Token::COLON, Token::IDENTIFIER, Token::END_OF_STATEMENT};
+				if (lookAhead(types, sizeof(types)/sizeof(types[0]), ctx)) {
+					prevToken(ctx);
+					result = variableDef(ctx, parent);
+				}
+				else {
+					prevToken(ctx);
 
-				nextToken(ctx, parent);
-				tok = ctx.getCurrentToken();
-
-				
-
-				prevToken(ctx);
-
-				
-
-				result = assignment(ctx, parent);
+					result = assignment(ctx, parent);
+				}
 			}
 			else {
 				prevToken(ctx);
