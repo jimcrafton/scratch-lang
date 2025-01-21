@@ -15,7 +15,7 @@
 
 int main(int argc, char** argv)
 {
-    std::string filename = "tests/test3.scratch";
+    std::string filename = "tests/test4.scratch";
 
     Lexer lexer;
 
@@ -58,6 +58,8 @@ int main(int argc, char** argv)
         std::cout << s << std::endl;
         parser.ast.print();
         std::cout << s << std::endl;
+
+
     }
     catch (const Parser::Error& e) {
         s = "";

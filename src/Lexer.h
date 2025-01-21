@@ -161,14 +161,20 @@ public:
         }
 
         void output(const Lexer& l) const {
-            std::string errorText = l.currentContext()->getLine(offset);
-            errorText += "\n\n";
-            std::string spacer;
-            if (col > 1) {
-                spacer.append(col - 1, '-');
+            auto ctxPtr = l.currentContext();
+            if (NULL != ctxPtr) {
+                std::string errorText = ctxPtr->getLine(offset);
+                errorText += "\n\n";
+                std::string spacer;
+                if (col > 1) {
+                    spacer.append(col - 1, '-');
+                }
+                errorText += spacer + "^" + "\n";
+                std::cout << errorText << "Lexical error: " << message << " at line : " << line << ", " << col << std::endl;
             }
-            errorText += spacer + "^" + "\n";
-            std::cout << errorText << "Lexical error: " << message << " at line : " << line << ", " << col << std::endl;
+            else {
+                std::cout << "Lexical error: " << message << std::endl;
+            }
         }
     };
 
@@ -436,11 +442,19 @@ public:
 
     const FileContext* currentContext() const {
         auto it = files.find(currentFilename);
+        if (it == files.end()) {
+            return NULL;
+        }
+
         return &it->second;
     }
 
     FileContext* currentContext() {
         auto it = files.find(currentFilename);
+        if (it == files.end()) {
+            return NULL;
+        }
+
         return &it->second;
     }
 
@@ -580,7 +594,7 @@ public:
             break;
 
             case CLOSE_PAREN: {
-                currentToken.type = Token::OPEN_PAREN;
+                currentToken.type = Token::CLOSE_PAREN;
             }
             break;
 
@@ -669,7 +683,7 @@ public:
         currentContext()->tokens.push_back(currentToken);
     }
 
-    void error_va(const char& ch, const std::string& errString, va_list arg)
+    void error_va(const std::string& errString, va_list arg)
     {
         char errbuf[1024];
         vsnprintf(errbuf, sizeof(errbuf) - 1, errString.c_str(), arg);
@@ -685,13 +699,14 @@ public:
         throw lexError;
     }
 
-    void error( const char& ch, std::string errString ...)
+    void error( std::string errString ...)
     {
         va_list args;
         va_start(args, errString);
-        error_va(ch, errString, args);
+        error_va(errString, args);
         va_end(args);
     }
+
 
     bool processCharacter(const char& ch) {
         bool result = true;
@@ -773,7 +788,7 @@ public:
                     reprocessCh = true;
                 }
                 else {
-                    error(ch, "Unknown lex state for character: %c", ch);
+                    error("Unknown lex state for character: %c", ch);
                     return false;
                 }
             }
@@ -816,7 +831,7 @@ public:
                     reprocessCh = !whitespace(ch);
                 }                
                 else {
-                    error(ch, "Invalid alphabet char, not in A-z or a-z" );
+                    error("Invalid alphabet char, not in A-z or a-z, ch: '%c'", ch );
                     return false;
                 }
             }
@@ -845,7 +860,7 @@ public:
                     appendToLexeme = true;
                 }
                 else {
-                    error(ch, "Invalid alpha num char, not in A-z or a-z or 0-9");
+                    error( "Invalid alpha num char, not in A-z or a-z or 0-9");
                     return false;
                 }
             }
@@ -872,7 +887,7 @@ public:
                     reprocessCh = !whitespace(ch);
                 }
                 else {
-                    error(ch, "Invalid digits char, not in 0 - 9 or starting with 0X|x, 0B|b");
+                    error( "Invalid digits char, not in 0 - 9 or starting with 0X|x, 0B|b");
                     return false;
                 }
             }
@@ -890,7 +905,7 @@ public:
                     reprocessCh = !whitespace(ch);
                 }
                 else {
-                    error(ch, "Invalid version char, not in 0 - 9 or '.'");
+                    error("Invalid version char, not in 0 - 9 or '.'");
                     return false;
                 }
             }
@@ -909,7 +924,7 @@ public:
                     reprocessCh = !whitespace(ch);
                 }
                 else {
-                    error(ch, "Invalid decimal char, not in 0 - 9 or '.'");
+                    error("Invalid decimal char, not in 0 - 9 or '.'");
                     return false;
                 }
             }
@@ -924,7 +939,7 @@ public:
                     reprocessCh = !whitespace(ch);
                 }
                 else {
-                    error(ch, "Invalid hexadecimal char, not in 0 - 9 or A-F or starting with 0X|x");
+                    error("Invalid hexadecimal char, not in 0 - 9 or A-F or starting with 0X|x");
                     return false;
                 }
             }
@@ -939,7 +954,7 @@ public:
                     reprocessCh = !whitespace(ch);
                 }
                 else {
-                    error(ch, "Invalid binary char, not in 0 - 1 or starting with 0B|b");
+                    error("Invalid binary char, not in 0 - 1 or starting with 0B|b");
                     return false;
                 }
             }
@@ -1035,7 +1050,7 @@ public:
                     tokenReady = true;
                 }
                 else {
-                    //error(ch, "Expected '=' char");
+                    //error("Expected '=' char");
                     //return false;
                     tokenReady = true;
                     reprocessCh = true;
@@ -1053,11 +1068,11 @@ public:
                     tokenReady = true;
                 }
                 else if (colon(currentCh(-1)) && !equalsSign(ch)) {
-                    error(ch, "Expected '=' char, looks like assignment was intended?");
+                    error("Expected '=' char, looks like assignment was intended?");
                     return false;
                 }
                 else {
-                    error(ch, "Expected ':=' sequence, looks like assignment was intended?");
+                    error("Expected ':=' sequence, looks like assignment was intended?");
                     return false;
                 }
             }
@@ -1089,7 +1104,7 @@ public:
                     tokenReady = true;
                 }
                 else {
-                    error(ch, "Expected closing brace '}'");
+                    error("Expected closing brace '}'");
                     return false;
                 }
             }
@@ -1099,7 +1114,7 @@ public:
             default: {
                 //no idea, assume error
                 currentCol++;
-                error(ch, "unhandled character '%c'", ch);
+                error("unhandled character '%c'", ch);
                 return false;
             }
         }
@@ -1169,7 +1184,7 @@ public:
             fclose(f);
         }
         else {
-            
+            error("invalid file '%s'", fileName.c_str());
         }
 
 

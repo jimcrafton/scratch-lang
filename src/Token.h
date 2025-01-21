@@ -61,7 +61,7 @@ public:
         return !(lineNumber == 0 && colNumber == 0 && offset == 0 && type == UNKNOWN);
     }
 
-    bool isOperator() const {
+    bool isMathOperator() const {
         return type == ADDITION_OPERATOR || type == SUBTRACTION_OPERATOR ||
             type == MULT_OPERATOR || type == DIV_OPERATOR || type == MOD_OPERATOR;
     }

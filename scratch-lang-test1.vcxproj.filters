@@ -1,10 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
-    </Filter>
     <Filter Include="Header Files">
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
@@ -13,11 +9,15 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="tests">
-      <UniqueIdentifier>{54bf65b8-8584-47fd-be96-4bca8e579d31}</UniqueIdentifier>
-    </Filter>
     <Filter Include="grammar">
       <UniqueIdentifier>{2e8cb90e-9507-43a2-9033-92f93a842839}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="tests">
+      <UniqueIdentifier>{bc16b3d9-18a3-462d-bef6-baacee17d37a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -55,6 +55,11 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <Text Include="grammar_ideas.txt">
+      <Filter>grammar</Filter>
+    </Text>
+  </ItemGroup>
+  <ItemGroup>
     <None Include="tests\test1.scratch">
       <Filter>tests</Filter>
     </None>
@@ -64,10 +69,8 @@
     <None Include="tests\test3.scratch">
       <Filter>tests</Filter>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="grammar_ideas.txt">
-      <Filter>grammar</Filter>
-    </Text>
+    <None Include="tests\test4.scratch">
+      <Filter>tests</Filter>
+    </None>
   </ItemGroup>
 </Project>

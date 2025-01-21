@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -148,12 +148,13 @@
     <ClCompile Include="src\Token.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <Text Include="grammar_ideas.txt" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="tests\test1.scratch" />
     <None Include="tests\test2.scratch" />
     <None Include="tests\test3.scratch" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="grammar_ideas.txt" />
+    <None Include="tests\test4.scratch" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -4,7 +4,7 @@
 
 #include "Lexer.h"
 
-
+#include <functional>
 
 
 class ParseNode {
@@ -181,6 +181,31 @@ public:
 	virtual std::string printInfo() const {
 
 		std::string result = "array literal";
+
+		return result;
+	};
+};
+
+class GroupedExpression : public ParseNodeWithComments {
+public:
+
+	std::vector<ParseNode*> expressions;
+
+	virtual ~GroupedExpression() {
+
+	}
+
+	virtual bool hasChildren() const {
+		return true;
+	}
+
+	virtual void getChildren(std::vector<ParseNode*>& children) const {
+		ParseNodeWithComments::getChildren(children);
+		children.insert(children.end(), expressions.begin(), expressions.end());
+	}
+
+	virtual std::string printInfo() const {
+		std::string result = "group expression";
 
 		return result;
 	};
@@ -477,7 +502,24 @@ public:
 
 	}
 
+
+	void visitNode(const ParseNode& node, std::function<void(const ParseNode&)> func) {
+		func(node);
+
+		if (node.hasChildren()) {
+			std::vector<ParseNode*> children;
+			node.getChildren(children);
+			for (auto child : children) {
+				if (child) {
+					visitNode(*child, func);
+				}
+			}
+		}
+	}
+
 	void printNode(const ParseNode& node) {
+		bool result = node.hasChildren();
+
 		size_t depth = 0;
 		const ParseNode* parent = node.parent;
 		while (parent != nullptr) {
@@ -490,23 +532,18 @@ public:
 
 		std::cout << tabSpacer << " ( " << node.printInfo() << std::endl;
 
-		if (node.hasChildren()) {
-			std::vector<ParseNode*> children;
-			node.getChildren(children);
-			for (auto child : children) {
-				if (child) {
-					printNode(*child);
-				}
-			}
-		}
-
 		std::cout << tabSpacer << " ) " << std::endl;
 	}
 
 	void print() {
 		
-		if (root != nullptr) {
-			printNode(*root);
+		if (root != nullptr) {			
+
+			visitNode(*root,
+				[this](const ParseNode& node) -> void {
+					this->printNode(node);
+				}
+			);
 		}
 	}
 };
@@ -554,12 +591,13 @@ public:
 		STATEMENTS_BLOCK,
 		ASSIGNMENT,
 		EXPRESSION,
+		GROUPED_EXPRESSION,
 		RETURN_EXPRESSION,
 		VARIABLE,
 		VARIABLE_DEFINITION,
 		SEND_MESSAGE,
 		MESSAGE,
-		
+		ERROR,
 	};
 
 	std::deque<State> stateStack;
@@ -602,6 +640,8 @@ public:
 
 
 	void error(const Token& token, const FileContext& ctx, const std::string& errMsg) {
+		pushState(ERROR);
+
 		Parser::Error parseError;
 		parseError.node = nullptr;
 		parseError.message = errMsg;
@@ -617,6 +657,9 @@ public:
 	void error(const Token& token, const FileContext& ctx, const std::string& errMsg, ParseNode* result) {
 		delete result;
 		popState();
+
+		pushState(ERROR);
+
 		Parser::Error parseError;
 		parseError.node = nullptr;
 		parseError.message = errMsg;
@@ -753,10 +796,13 @@ public:
 			state(s), 
 			ctx(c), 
 			errMsg(msg) ,
-			resultPtr(&r)
+			resultPtr(NULL)
 		{
 			parser.pushState(state);
 			stateDepth = parser.stateStack.size();
+			if (NULL != r) {
+				resultPtr = &r;
+			}
 		}
 
 		~ParseStateGuard() {
@@ -766,7 +812,12 @@ public:
 					n = *resultPtr;
 				}
 
-				parser.error(ctx.getCurrentToken(), ctx, errMsg, n);
+				if (parser.currentState() != Parser::ERROR) {
+					parser.error(ctx.getCurrentToken(), ctx, errMsg, n);
+				}
+				else {
+					return;
+				}
 			}
 
 			parser.popState();
@@ -866,6 +917,41 @@ public:
 		return result;
 	}
 
+
+	ParseNode* groupedExpression(const FileContext& ctx, ParseNode* parent) {
+		ParseNode* result = nullptr;
+
+		ParseStateGuard pg(*this, GROUPED_EXPRESSION, ctx, "Parsing group expression, invalid state exiting parse", result);
+
+		verifyTokenTypeOrFail(ctx.getCurrentToken(),
+			Token::OPEN_PAREN,
+			ctx,
+			"Parsing grouped expression, expected closing paren ')'",
+			result);
+
+		nextToken(ctx, parent);
+
+		GroupedExpression* grpExpr = new GroupedExpression();
+
+		grpExpr->parent = parent;
+
+		ParseNode* expr = expression(ctx, grpExpr);
+
+		grpExpr->expressions.push_back(expr);
+
+		result = grpExpr; 
+
+		nextToken(ctx, parent);
+
+		verifyTokenTypeOrFail(ctx.getCurrentToken(),
+			Token::CLOSE_PAREN,
+			ctx,
+			"Parsing grouped expression, expected closing paren ')'",
+			result);
+
+		return result;
+	}
+
 	ParseNode* expression(const FileContext& ctx, ParseNode* parent) {
 		ParseNode* result = nullptr;
 
@@ -880,16 +966,14 @@ public:
 		}
 		else if (first.type == Token::OPEN_PAREN) {
 			//should be expression!
-			nextToken(ctx, parent);
-			result = expression(ctx, parent);
+			result = groupedExpression(ctx, parent);
 
-			nextToken(ctx, parent);
+			
+		}
+		else if (first.isLiteral()) {
+			//send message
 
-			verifyTokenTypeOrFail(ctx.getCurrentToken(),
-				Token::CLOSE_PAREN,
-				ctx,
-				"Parsing grouped expression, expected closing paren ')'",
-				result);
+			result = sendMessage(ctx, parent);
 		}
 		else if (first.type == Token::IDENTIFIER) {
 			//send message
@@ -914,11 +998,19 @@ public:
 
 		auto tok = ctx.getCurrentToken();
 
-		InstanceNode* instance = new InstanceNode();
-		instance->parent = sendMsg;
-		instance->name = tok.text.str();
+		if (tok.isLiteral()) {
+			ParseNode* varLit = varLiteral(ctx, sendMsg);
+			sendMsg->instance = varLit;
+		}
+		else {
+			InstanceNode* instance = new InstanceNode();
+			instance->parent = sendMsg;
+			instance->name = tok.text.str();
 
-		sendMsg->instance = instance;
+			sendMsg->instance = instance;
+		}
+
+		
 
 		nextToken(ctx, sendMsg);
 
@@ -1073,7 +1165,13 @@ public:
 		pushState(MESSAGE);
 		auto stateDepth = stateStack.size();
 
-		Token::Type types []  = {Token::IDENTIFIER,Token::ASSIGMENT_OPERATOR };
+		Token::Type types []  = {Token::IDENTIFIER,
+								Token::ASSIGMENT_OPERATOR,
+								Token::ADDITION_OPERATOR,
+								Token::MULT_OPERATOR,
+								Token::SUBTRACTION_OPERATOR,
+								Token::DIV_OPERATOR,
+								Token::MOD_OPERATOR };
 
 		verifyTokenTypeOrFail(ctx.getCurrentToken(),
 			types,sizeof(types)/sizeof(Token::Type),
@@ -1107,10 +1205,16 @@ public:
 				prevToken(ctx);
 			}
 		}
-		else if (msgName.type == Token::ASSIGMENT_OPERATOR) {
+		else if (msgName.type == Token::ASSIGMENT_OPERATOR || msgName.isMathOperator()) {
 			switch (tok.type) {
 				case Token::IDENTIFIER: {
+					ParseNode* var = variable(ctx, result);
+					result->parameters.push_back(var);
+				} break;
 
+				case Token::OPEN_PAREN: {
+					ParseNode* expr = expression(ctx, result);
+					result->parameters.push_back(expr);
 				} break;
 
 				case Token::OPEN_BRACKET: case Token::INTEGER_LITERAL: 
@@ -1184,7 +1288,7 @@ public:
 		}
 		else if (first.type == Token::OPEN_PAREN) {
 			//expression
-			result = expression(ctx, parent);
+			result = groupedExpression(ctx, parent);
 		}
 		else {
 			error(ctx.getCurrentToken(), ctx, "Parsing statement, invalid code", result);

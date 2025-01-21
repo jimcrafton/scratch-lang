@@ -2,6 +2,7 @@
 
 
 
+/*
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/BasicBlock.h"
@@ -13,7 +14,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
-
+*/
 
 
 
@@ -284,11 +285,11 @@ namespace language {
 
 
 		private:
-
+			/*
 			static std::unique_ptr<llvm::LLVMContext> llvmCtxPtr;
 			static std::unique_ptr<llvm::Module> modulePtr;
 			static std::unique_ptr<llvm::IRBuilder<>> llvmBuilderPtr;
-
+			*/
 
 			Program* programInst = NULL;
 			Program* libInst = NULL;
