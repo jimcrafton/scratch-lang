@@ -41,7 +41,7 @@ public:
         EQUALS_SIGN,
         VERSION_LITERAL,
         AT_SIGN,
-        
+        DOT,
     };
 
     static const std::map< Token::Type, std::string> tokenNames;

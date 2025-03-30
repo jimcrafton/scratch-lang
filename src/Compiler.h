@@ -9,12 +9,14 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
-#include "llvm/IR/Verifier.h"
+
 */
+
+
+
+
+
 
 
 
@@ -24,7 +26,30 @@
 #include <unordered_map>
 #include <string>
 
+#include "AST.h"
 
+
+
+
+
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/TargetParser/Host.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/TargetParser/SubtargetFeature.h"
+#include "llvm/ADT/StringMap.h"
+
+
+namespace utils {
+	class cmd_line_options;
+}
 
 namespace language {
 
@@ -32,6 +57,13 @@ namespace language {
 
 		typedef std::string CppString;
 		 
+		class Compiler;
+
+
+		enum OutputFormat {
+			OUT_INTERMEDIATE = 1,
+			OUT_OBJECT,
+		};
 
 		class Primitive {
 		public:
@@ -150,11 +182,21 @@ namespace language {
 
 		typedef dictionary<Flag> Flags;
 
+		class MessageParameter {
+		public:
+			CppString name;
+			Flags flags;
+
+			Instance defValue;
+		};
+
 
 		class Message {
 		public:
 			CppString name;
 			Flags flags;
+
+			std::unordered_map<CppString, MessageParameter> parameters;
 		};
 
 
@@ -176,20 +218,8 @@ namespace language {
 
 		};
 
-		class CodeFragmentBlock : public Block {
-		public:
-			VariablesBlock vars;
-			CppString name;
-		};
-
 		
-		class MessageParameter {
-		public:
-			CppString name;
-			Flags flags;
-
-			Instance defValue;
-		};
+		
 
 		class MessageBlock : public Block {
 		public:		
@@ -198,9 +228,9 @@ namespace language {
 			PreConditionBlock preConditions;
 			PostConditionBlock postConditions;
 
-			std::unordered_map<CppString, MessageParameter> parameters;
+			
 
-			CodeFragmentBlock code;
+			//CodeFragmentBlock code;
 		};
 
 		
@@ -216,12 +246,23 @@ namespace language {
 		};
 
 
+		class CodeFragmentBlock : public Block {
+		public:
+			VariablesBlock vars;
+			CppString name;
+
+			std::unordered_map<CppString, ClassBlock> classDefs;
+		};
+
+
 		class NamespaceBlock : public Block {
 		public:
 			CppString name;
 			CppString parent;
 
-			std::unordered_map<CppString, ClassBlock> classDefs;
+			
+
+			CodeFragmentBlock code;
 		};
 
 		class ThreadBlock : public Block {
@@ -237,26 +278,47 @@ namespace language {
 
 		class Module {
 		public:
+			
+			Module(Compiler& c) { init(c); }
+
+			CppString name = "a";
 			std::map<CppString, Import> imports;
 			std::map<CppString, NamespaceBlock> namespaces;
+
+			std::unique_ptr<llvm::Module> modulePtr;
+
+			void init(Compiler& c);
+
+			void output(Compiler& c, OutputFormat outFmt, std::string& outputFileName);
 		};
 
 		
 
 		class ExecutableFragment {
 		public:
-			CppString name;
-			CppString version;
+			virtual ~ExecutableFragment() {
+				for (auto m : modules) {
+					delete m.second;
+				}
+				modules.clear();
+			}
 
-			std::map<CppString, Module> modules;
+			typedef std::map<CppString, Module*> ModuleMapT;
+			CppString name="a";
+			CppString version="1.0.0";
+
+			ModuleMapT modules;
 		};
 
 		class Program : public ExecutableFragment {
 		public:
 			CppString mainEntryFunction;
+			virtual ~Program() {}
 		};
 
 		class Library : public ExecutableFragment {
+		public:
+			virtual ~Library() {}
 			CppString libInitFunction;
 			CppString libTerminationFunction;
 		};
@@ -274,41 +336,155 @@ namespace language {
 		};
 
 
+		class Stage1;
+
+
+		class ScopedEnvironment {
+		public:
+			ScopedEnvironment() {}
+
+			~ScopedEnvironment() {
+				clear();
+			}
+
+			ScopedEnvironment* parent = nullptr;
+
+			std::vector<ScopedEnvironment*> children;
+
+			void add(ScopedEnvironment* scope) {
+				children.push_back(scope);
+			}
+
+			void clear() {
+				for (auto child : children) {
+					delete child;
+				}
+
+				children.clear();
+			}
+		};
+
+
+		enum CompilerErrorType {
+			UNKNOWN_ERR = 0,
+		};
+
+		class CompilerOptions {
+		public:
+			bool compileOnly = false;
+			void init(utils::cmd_line_options& cmdline);
+		};
 
 
 		class Compiler {
 		public:
-			static void init();
-			static void finish();
+			class Error {
+			public:
+				const Compiler& compiler;
+				std::string message;
+				
+				CompilerErrorType errCode = UNKNOWN_ERR;
+
+				Error(Compiler& c, const std::string& err) :compiler(c), message(err){}
 
 
-
-
-		private:
-			/*
-			static std::unique_ptr<llvm::LLVMContext> llvmCtxPtr;
-			static std::unique_ptr<llvm::Module> modulePtr;
-			static std::unique_ptr<llvm::IRBuilder<>> llvmBuilderPtr;
-			*/
-
-			Program* programInst = NULL;
-			Program* libInst = NULL;
-
-			std::map< CppString, Class> classes;
-
+				void output() const {
+					std::cout << "Compiler error: " << message << std::endl;
+				}
+			};
 
 			Compiler() {
-
+				init();
 			}
 
 			~Compiler() {
-
+				terminate();
 			}
 
-			static Compiler* compilerInstance;
+			void build(const std::vector<std::string>& files);
+
+			//build up initial structures like
+			//modules, program, etc
+			//if no module is found then create one called "a"
+			//and since no module was found there won't be a 
+			//program/librarey either so assume program is 
+			//called "a" as well
+			void stage1(const language::AST& ast);
+
+
+			void compile(const language::AST& ast);
+
+			void dumpCompilerOutput();
+
+			void dumpCompilerObjectCode();
+
+			llvm::Module* createModule(const std::string& name);
+
+			static void println(const std::string& msg);
+			static void print(const std::string& msg, bool emitEndln=false);
+
+			const llvm::TargetMachine* getTargetMachine() const { return llvmTargetMachinePtr.get(); }
+			llvm::TargetMachine* getTargetMachine() { return llvmTargetMachinePtr.get(); }
+
+			void outputModule(OutputFormat outFmt, llvm::Module&, const std::string& outfileName);
+
+			CompilerOptions options;
+		private:
+			friend class Stage1;
+
+			
+
+			
+			std::unique_ptr<llvm::LLVMContext> llvmCtxPtr;
+			std::unique_ptr<llvm::Module> mainEntryModulePtr;
+			std::unique_ptr<llvm::IRBuilder<>> llvmBuilderPtr;
+			std::unique_ptr<llvm::TargetMachine> llvmTargetMachinePtr;
+			
+			const llvm::Target* llvmTarget = nullptr;
+			llvm::Triple llvmTargetTriple;
+
+			std::unique_ptr <ExecutableFragment> executableCodePtr;
+			Program* programInst = NULL;
+			Program* libInst = NULL;
+
+			ScopedEnvironment globalEnv;
+
+			llvm::Function* mainEntryFunc = nullptr;
+
+
+			std::map< CppString, Class> classes;
+
+			void init();
+
+			void terminate();
+
+			void stage1VisitNode(const language::ParseNode& p);
+
+			void clearEnvironment();
+
+			void createMainEntryPoint();
+
+			void outputMainEntryPoint(OutputFormat outFmt, std::string& outfileName);
 		};
 
 
+
+		class Linker {
+		public:
+			Linker() { init(); }
+
+			~Linker() { terminate(); }
+
+			void link(const Compiler& compiler);
+
+			std::string outputFileName;
+
+			std::vector<std::string> objs;
+		private:
+			void init();
+
+			void terminate();
+		};
 
 	}
 

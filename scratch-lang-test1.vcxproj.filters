@@ -53,6 +53,9 @@
     <ClCompile Include="src\runtime.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Parser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="grammar_ideas.txt">
@@ -70,6 +73,9 @@
       <Filter>tests</Filter>
     </None>
     <None Include="tests\test4.scratch">
+      <Filter>tests</Filter>
+    </None>
+    <None Include="tests\test5.scratch">
       <Filter>tests</Filter>
     </None>
   </ItemGroup>

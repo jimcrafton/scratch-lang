@@ -33,4 +33,5 @@ const std::map< Token::Type, std::string> Token::tokenNames = {
         { Token::EQUALS_SIGN, "EQUALS_SIGN" },
         { Token::VERSION_LITERAL, "VERSION_LITERAL", },
         { Token::AT_SIGN, "AT_SIGN", },
+        { Token::DOT, "DOT", },
 };

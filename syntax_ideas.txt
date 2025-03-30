@@ -1,0 +1,68 @@
+
+
+
+
+1 + 2
+
+b := 2
+c := 4 * 2 + (7/8)
+c := 4 stringVal
+d := "345.78" intVal
+d := "345.78" decimalVal
+d := "345.78" realVal
+
+# <var name>[':' type]
+
+d:int8
+d:uint8
+d:int16
+d:uint16
+d:int32
+d:uint32
+d:int64
+d:uint64
+d:real32
+d:real64
+
+d:bool
+d:string
+
+d:array
+d:set
+d:dictionary
+
+
+var d = "hello"
+h = "hello"  //immutable is default?
+
+
+for i in <collection>
+for i in (start,end)
+{
+
+}
+
+while condition {
+}
+
+if condition {
+}
+else condition {
+}
+else {
+}
+
+
+d := SomeObject create
+d count   #method is count, unary
+d dosomething:10  #method is dosomething: binary
+d dosomething:5 withData: Data create:12 #method is dosomething:withData:  multi
+
+
+
+
+a incr
+d incr
+
+
+

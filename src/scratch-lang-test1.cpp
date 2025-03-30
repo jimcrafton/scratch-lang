@@ -1,21 +1,18 @@
 // new-lang-test1.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
 
-#include <iostream>
-#include <string>
-#include <deque>
-#include <vector>
-#include <map>
 
 
 #include "Lexer.h"
 #include "Parser.h"
 
+#include "compiler.h"
+
 
 
 int main(int argc, char** argv)
 {
-    std::string filename = "tests/test4.scratch";
+    std::string filename = "tests/test5.scratch";
 
     Lexer lexer;
 
@@ -24,7 +21,7 @@ int main(int argc, char** argv)
         lexer.lex(filename);
     }
     catch (const Lexer::Error& e) {
-        e.output(lexer);
+        e.output();
         return -1;
     }
     
@@ -70,8 +67,22 @@ int main(int argc, char** argv)
         return -1;
     }
     
-    
 
+
+
+    language::compiler::Compiler compiler;
+
+    try {
+
+        compiler.compile(parser.ast);
+
+        compiler.dumpCompilerOutput();
+
+        compiler.dumpCompilerObjectCode();
+    }
+    catch (const std::exception& e) {
+        std::cout << e.what() << std::endl;
+    }
     return 0;
 }
 

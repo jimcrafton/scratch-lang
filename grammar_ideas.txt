@@ -83,13 +83,21 @@ statements_block ::== (class_block|statement|comment)+
 
 
 
-class_block ::== class_id identifier inheritance_id type_decl [implementation_id implementation_types ] 
+class_block ::== class_id identifier [inheritance_id type_decl ] [implementation_id implementation_types ] 
 	open_block		
 		[scope_block+]
 		[message_block+]
 	close_block
 
+
+record_block ::== record_id identifier [inheritance_id type_decl ]
+open_block		
+	[member_variables]
+close_block
+
 class_id ::== 'class'
+record_id ::== 'record'
+
 inheritance_id  ::== 'inherits'
 implementation_id  ::== 'implements'
 implementation_types  ::== type_decl [',' type_decl]+
@@ -101,7 +109,11 @@ scope_block  ::== scope_type
 
 member_variables ::== (member_variable end_of_statement)+
 
-member_variable ::== [variable_modifier] identifier ':' type_decl 
+member_variable ::== [comp_flags] identifier ':' type_decl 
+
+
+comp_flags  ::== '@'  open_bracket  [identifier (',' identifier)*]  close_bracket
+
 
 scope_type  ::== private_scope_decl | public_scope_decl
 private_scope_decl ::== 'private'
@@ -112,15 +124,15 @@ static_modifier  ::== 'static'
 
 message_block ::== message_decl open_block statements_block close_block
 
-message_decl ::== [message_modifier] [type_decl] message_decl_unary | message_decl_binary | message_decl_multi
+message_decl ::== [comp_flags] [type_decl] message_decl_unary | message_decl_binary | message_decl_multi
 message_decl_unary ::== identifier
 message_decl_binary ::== identifier ':' single_param_decl
 message_decl_multi ::== identifier ':' single_param_decl (',' single_param_decl)+
 
 single_param_decl ::== identifier ':' type_decl
-message_modifier  ::== static_modifier
 
-type_decl ::== identifier 
+
+type_decl ::== [qualifier '.']identifier 
 
 
 
@@ -185,7 +197,11 @@ close_bracket ::== ']'
 
 send_message ::== instance message|operator-message
 
-instance ::== variable_id|variable_def|var_literal|expression
+
+
+instance ::== variable_id|variable_def|var_literal|expression|instance_var
+
+instance_var  ::== (instance '.')+ identifier
 
 message ::== message_name|message_name_params
 message_name ::== identifier

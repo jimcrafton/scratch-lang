@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{089b41da-5675-47d2-96b1-a03b52807fc0}</ProjectGuid>
-    <RootNamespace>newlangtest1</RootNamespace>
+    <ProjectGuid>{53667CE9-42F4-440A-B345-938C92C71CCE}</ProjectGuid>
+    <RootNamespace>scratch-tool</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -143,6 +143,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\cmd_line_options.h" />
     <ClInclude Include="src\Compiler.h" />
     <ClInclude Include="src\Lexer.h" />
     <ClInclude Include="src\Parser.h" />
@@ -154,7 +155,7 @@
     <ClCompile Include="src\compiler.cpp" />
     <ClCompile Include="src\Parser.cpp" />
     <ClCompile Include="src\runtime.cpp" />
-    <ClCompile Include="src\scratch-lang-test1.cpp" />
+    <ClCompile Include="src\scratch-tool.cpp" />
     <ClCompile Include="src\Token.cpp" />
   </ItemGroup>
   <ItemGroup>

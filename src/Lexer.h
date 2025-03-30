@@ -6,6 +6,10 @@
 #include "string_ref.h"
 #include "Token.h"
 #include <cstdarg>
+#include <vector>
+#include <string>
+#include <deque>
+#include <iostream>
 
 
 
@@ -152,6 +156,8 @@ public:
         size_t col = 0;
         size_t offset = 0;
         std::string message;
+        const Lexer& lexer;
+        Error(const Lexer& l):lexer(l) {}
 
         void clear() {
             line = 0;
@@ -160,8 +166,8 @@ public:
             message = "";
         }
 
-        void output(const Lexer& l) const {
-            auto ctxPtr = l.currentContext();
+        void output() const {
+            auto ctxPtr = lexer.currentContext();
             if (NULL != ctxPtr) {
                 std::string errorText = ctxPtr->getLine(offset);
                 errorText += "\n\n";
@@ -302,12 +308,18 @@ public:
         return (ch == '@');
     }
 
+    bool dot(const char& ch)
+    {
+        return (ch == '.');
+    }
+
     bool reservedCh(const char& ch)
     {
         return openParen(ch)||closeParen(ch)||openBlock(ch)||
             closeBlock(ch)|| openBracket(ch) ||
             closeBracket(ch) || endOfStatement(ch) || isOperator(ch)||
-            comment(ch)|| commentStart(ch) || commentEnd(ch) || comma(ch);
+            comment(ch)|| commentStart(ch) || commentEnd(ch) || comma(ch) || 
+            dot(ch) || atSign(ch);
     }
 
     bool comment(const char& ch)
@@ -370,6 +382,7 @@ public:
         COLON,
         EQUALS_SIGN,
         AT_SIGN,
+        DOT,
         ERROR,
         UNKNOWN = 0xFFFFFFFF
     };
@@ -400,7 +413,7 @@ public:
     ~Lexer() {}
 
     void initReservedCharacters() {
-        reservedCharacters = "()[]{};+-/*:@";
+        reservedCharacters = "()[]{};+-/*:@.";
     }
 
     void initKeywords() {
@@ -415,12 +428,16 @@ public:
             "import",
             "namespace",
             "class",
+            "record",
             "inherits",
             "implements",
             "private",
             "public",
             "static",
-            "return"
+            "return",
+            "nil",
+            "self",
+            "super"
         };
     }
 
@@ -630,6 +647,12 @@ public:
             }
             break;
 
+            case DOT: {
+                currentToken.type = Token::DOT;
+                popState();
+            }
+            break;
+
             case A_Z: case A_Z_DIGIT: {
                 currentToken.type = Token::IDENTIFIER;
 
@@ -690,7 +713,7 @@ public:
 
         clearState();
 
-        Error lexError;
+        Error lexError(*this);
         
         lexError.line = currentLine;
         lexError.col = currentCol - 1;
@@ -767,6 +790,10 @@ public:
                     pushState(AT_SIGN);
                     reprocessCh = true;
                 }
+                else if (dot(ch)) {
+                    pushState(DOT);
+                    reprocessCh = true;
+                }
                 else if (openBracket(ch)) {
                     pushState(OPEN_BRACKET);
                     reprocessCh = true;
@@ -813,8 +840,10 @@ public:
                     pushState(A_Z_DIGIT);
                     reprocessCh = true;
                 }
-                else if (ch == '.') {
-                    appendToLexeme = true;
+                else if (dot(ch)) {
+                    appendToLexeme = false;
+                    tokenReady = true;
+                    reprocessCh = true;
                 }
                 else if (colon(ch)) {                    
                     appendToLexeme = false;
@@ -838,11 +867,12 @@ public:
             break;
 
             case A_Z_DIGIT: {
-                if (ch == '.') {
-                    appendToLexeme = true;
+                if (dot(ch)) {
+                    appendToLexeme = false;
+                    tokenReady = true;
+                    reprocessCh = true;
                 }
                 else if (colon(ch)) {
-                    pushState(COLON);
                     appendToLexeme = false;
                     tokenReady = true;
                     reprocessCh = true;
@@ -870,7 +900,7 @@ public:
                 if (digit(ch)) {
                     appendToLexeme = true;
                 }
-                else if (ch == '.') {
+                else if (dot(ch)) {
                     pushState(DECIMAL_DIGIT);
                     appendToLexeme = true;
                 }
@@ -897,7 +927,7 @@ public:
                 if (digit(ch)) {
                     appendToLexeme = true;
                 }
-                else if (ch == '.') {
+                else if (dot(ch)) {
                     appendToLexeme = true;
                 }
                 else if (whitespace(ch) || reservedCh(ch)) {
@@ -915,7 +945,7 @@ public:
                 if (digit(ch)) {
                     appendToLexeme = true;
                 }
-                else if (ch == '.') {
+                else if (dot(ch)) {
                     pushState(VERSION_DIGIT);
                     appendToLexeme = true;
                 }
@@ -1031,6 +1061,12 @@ public:
             break;
 
             case AT_SIGN: {
+                appendToLexeme = true;
+                tokenReady = true;
+            }
+            break;
+
+            case DOT: {
                 appendToLexeme = true;
                 tokenReady = true;
             }
