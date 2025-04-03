@@ -60,6 +60,22 @@ d dosomething:5 withData: Data create:12 #method is dosomething:withData:  multi
 
 
 
+msg  toString: p1:int32 {
+
+}
+
+msg [int32] toString {
+	return 12
+}
+
+msg [int32,string] toString {
+	return 100,"hello"
+}
+
+msg toString:test:bool, t:int32  [int32,string] {
+	return 100,"hello"
+}
+
 
 a incr
 d incr
