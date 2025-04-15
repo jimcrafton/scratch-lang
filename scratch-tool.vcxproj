@@ -71,8 +71,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>F:\code\boost_1_67_0;D:\code\llvm-project-llvmorg-19.1.6\built\LLVM\include;$(IncludePath)</IncludePath>
-    <LibraryPath>F:\code\boost_1_67_0\libs;D:\code\llvm-project-llvmorg-19.1.6\built\LLVM\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>D:\code\llvm-project-llvmorg-19.1.6\built\LLVM\include;$(IncludePath)</IncludePath>
+    <LibraryPath>D:\code\llvm-project-llvmorg-19.1.6\built\LLVM\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>D:\code\llvm-project-llvmorg-19.1.6\built\LLVM\include;F:\code\boost_1_67_0;$(IncludePath)</IncludePath>
@@ -150,6 +150,7 @@
     <ClInclude Include="src\Runtime.h" />
     <ClInclude Include="src\string_ref.h" />
     <ClInclude Include="src\Token.h" />
+    <ClInclude Include="src\version.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\compiler.cpp" />

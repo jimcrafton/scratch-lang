@@ -149,6 +149,7 @@
     <ClInclude Include="src\Runtime.h" />
     <ClInclude Include="src\string_ref.h" />
     <ClInclude Include="src\Token.h" />
+    <ClInclude Include="src\version.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\compiler.cpp" />

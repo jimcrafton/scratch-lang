@@ -124,7 +124,7 @@ static_modifier  ::== 'static'
 
 message_block ::== message_decl open_block statements_block close_block
 
-message_decl ::== [comp_flags] [type_decl] message_decl_unary | message_decl_binary | message_decl_multi
+message_decl ::== [comp_flags] 'msg'  message_decl_unary | message_decl_binary | message_decl_multi  [return_type_decl]
 message_decl_unary ::== identifier
 message_decl_binary ::== identifier ':' single_param_decl
 message_decl_multi ::== identifier ':' single_param_decl (',' single_param_decl)+
@@ -132,7 +132,11 @@ message_decl_multi ::== identifier ':' single_param_decl (',' single_param_decl)
 single_param_decl ::== identifier ':' type_decl
 
 
-type_decl ::== [qualifier '.']identifier 
+tuple_type_decl ::==  '[' type_decl [',' type_decl]+ ']' 
+named_tuple_type_decl ::==  '[' single_param_decl [',' single_param_decl]+ ']' 
+
+
+return_type_decl ::== '@' tuple_type_decl | named_tuple_type_decl
 
 
 
@@ -167,8 +171,8 @@ namespace_name ::== identifier ['.'identifier]+
 qualifier  ::== namespace_name '.'
 
 variable ::== ([qualifier]identifier)|var_literal
-variable_def  ::==  ([qualifier]identifier) ':' type_def
-type_def  ::== ([qualifier]identifier)
+variable_def  ::==  ([qualifier]identifier) ':' type_decl
+type_decl  ::== ([qualifier]identifier)
 
 variable_id  ::== ([namespace_name'.']identifier)
 var_literal ::== integer_literal|decimal_literal|binary_literal|hexadecimal_literal|string_literal|array_literal

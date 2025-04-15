@@ -1,0 +1,14 @@
+
+
+module test1 , 1.4.11
+
+{
+
+runtime.main := msg (args:array) [int32] {
+	runtime.system print: "hello"	;
+	return 0;
+};
+
+
+}
+

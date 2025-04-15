@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstdio>
 #include <map>
+#include <algorithm>
 
 namespace utils {
 	class cmd_line_options {
@@ -464,6 +465,12 @@ namespace utils {
 
 				for (size_t i = 0;i < original_cmd_line.size();i++) {
 					auto val = original_cmd_line[i];
+					std::string assigned_val = "";
+					auto eqpos = val.find("=");
+					if (eqpos != std::string::npos) {
+						assigned_val = val.substr(eqpos + 1);
+						val.erase(eqpos);
+					}
 					if (is_switch(val)) {
 						cur_param = val;
 						std::string arg = "";
@@ -479,17 +486,24 @@ namespace utils {
 						}
 						
 						if (!opt.no_args) {
-							if (i + 1 < argc) {
-								if (!is_switch(original_cmd_line[i + 1])) {
-									arg = original_cmd_line[i + 1];
-									i++;
-								}
-								else {
-									arg = "";
-								}
-								
+							if (eqpos != std::string::npos) {
+								arg = assigned_val;
 								clear_cur_param = true;
 							}
+							else {
+								if (i + 1 < argc) {
+									if (!is_switch(original_cmd_line[i + 1])) {
+										arg = original_cmd_line[i + 1];
+										i++;
+									}
+									else {
+										arg = "";
+									}
+
+									clear_cur_param = true;
+								}
+							}
+							
 							if (!arg.empty()) {
 								param.vals.push_back(arg);
 							}

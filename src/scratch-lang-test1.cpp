@@ -14,13 +14,13 @@ int main(int argc, char** argv)
 {
     std::string filename = "tests/test5.scratch";
 
-    Lexer lexer;
+    lexer::Lexer lexer;
 
     
     try {
         lexer.lex(filename);
     }
-    catch (const Lexer::Error& e) {
+    catch (const lexer::Lexer::Error& e) {
         e.output();
         return -1;
     }
@@ -39,12 +39,12 @@ int main(int argc, char** argv)
     std::cout << s << std::endl;
 
     
-    for (const Token& t : lexer.currentContext()->tokens) {
-        std::cout << Token::tokenNames.find(t.type)->second << ": '" << t.text.str() << "'" << std::endl;
+    for (const lexer::Token& t : lexer.currentContext()->tokens) {
+        std::cout << lexer::Token::tokenNames.find(t.type)->second << ": '" << t.text.str() << "'" << std::endl;
     }
 
 
-    Parser parser;
+    parser::Parser parser;
 
     try {
         parser.parse(lexer);
@@ -58,7 +58,7 @@ int main(int argc, char** argv)
 
 
     }
-    catch (const Parser::Error& e) {
+    catch (const parser::Parser::Error& e) {
         s = "";
         s.append(80, '*');
         std::cout << s << std::endl;

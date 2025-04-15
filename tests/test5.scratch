@@ -1,0 +1,47 @@
+
+
+module test1 , 1.4.11
+
+{
+
+
+class Man {
+
+}
+
+class bob inherits Man {
+	public {
+		x: int32 ;
+		y: int32 ;
+	}
+
+
+	private {
+		name: string;
+	}
+
+	msg toString : t:int34, isFat:bool [bool] {
+		return "my name is " + name ;
+	}
+}
+
+record Point {
+x:uin32; 
+y : uint44;
+}
+
+
+d := 0.00112;
+
+p:Point;
+p.x := 100;
+
+
+#{
+msg main [int32] {
+	return 0;
+}
+}#
+
+}
+

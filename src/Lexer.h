@@ -12,6 +12,76 @@
 #include <iostream>
 
 
+namespace language {    
+    enum KeywordIdx {
+        KEYWORD_IF=0,
+        KEYWORD_ELSE,
+        KEYWORD_TRUE,
+        KEYWORD_FALSE,
+        KEYWORD_MODULE,
+        KEYWORD_PROGRAM,
+        KEYWORD_LIB,
+        KEYWORD_IMPORT,
+        KEYWORD_NAMESPACE,
+        KEYWORD_CLASS,
+        KEYWORD_RECORD,
+        KEYWORD_INHERITS,
+        KEYWORD_IMPLEMENTS,
+        KEYWORD_PRIVATE,
+        KEYWORD_PUBLIC,
+        KEYWORD_STATIC,
+        KEYWORD_RETURN,
+        KEYWORD_NIL,
+        KEYWORD_SELF,
+        KEYWORD_SUPER,
+        KEYWORD_MSG
+    };
+    const std::vector<std::string> Keywords = { 
+            "if",
+            "else",
+            "true",
+            "false",            
+            "module",
+            "program",
+            "lib",
+            "import",
+            "namespace",
+            "class",
+            "record",
+            "inherits",
+            "implements",
+            "private",
+            "public",
+            "static",
+            "return",
+            "nil",
+            "self",
+            "super",
+            "msg"
+    };
+
+    enum ReservedCharactersIdx {
+        RESERVED_CH_OPEN_PAREN=0,
+        RESERVED_CH_CLOSE_PAREN,
+        RESERVED_CH_OPEN_BRACKET,
+        RESERVED_CH_CLOSE_BRACKET,
+        RESERVED_CH_OPEN_BLOCK,
+        RESERVED_CH_CLOSE_BLOCK,
+        RESERVED_CH_END_OF_STATEMENT,
+        RESERVED_CH_ADDITION_OP,
+        RESERVED_CH_SUBTRACTION_OP,
+        RESERVED_CH_DIVISION_OP,
+        RESERVED_CH_MULTIPLICATION_OP,
+        RESERVED_CH_COLON,
+        RESERVED_CH_AT_SIGN,
+        RESERVED_CH_DOT,
+        
+    };
+    const std::string ReservedCharacters = "()[]{};+-/*:@.";
+}
+
+
+namespace lexer {
 
 class FileContext {
 public:
@@ -158,6 +228,7 @@ public:
         std::string message;
         const Lexer& lexer;
         Error(const Lexer& l):lexer(l) {}
+        Error(const Lexer& l, const std::string& m) :lexer(l),message(m) {}
 
         void clear() {
             line = 0;
@@ -386,60 +457,31 @@ public:
         ERROR,
         UNKNOWN = 0xFFFFFFFF
     };
+    
+    
 
     std::deque<State> stateStack;
     std::string currentLexeme;
-    Token currentToken;    
+    Token currentToken;
     size_t currentChIndex;
     size_t currentLexemeStart;
     size_t currentLexemeEnd;
-    size_t currentLine;    
+    size_t currentLine;
     size_t currentCol;
     std::string currentFilename;
-    
-    
-
-    std::vector<std::string> keywords;
-    std::string reservedCharacters;
 
     FileContext* currentCtx;
-    std::map<std::string,FileContext> files;
+    std::map<std::string,FileContext*> files;
 
     Lexer() : currentChIndex(0), currentLexemeStart(0), currentLexemeEnd(0), currentLine(0), currentCol(0),currentCtx(NULL){
         stateStack.push_back(NONE);
-        initKeywords();
-        initReservedCharacters();
     }
-    ~Lexer() {}
-
-    void initReservedCharacters() {
-        reservedCharacters = "()[]{};+-/*:@.";
+    ~Lexer() {
+        for (auto f : files) {
+            delete f.second;
+        }
     }
 
-    void initKeywords() {
-        keywords = { "if", 
-            "else", 
-            "true", 
-            "false",             
-            "main",
-            "module",
-            "program",
-            "lib",
-            "import",
-            "namespace",
-            "class",
-            "record",
-            "inherits",
-            "implements",
-            "private",
-            "public",
-            "static",
-            "return",
-            "nil",
-            "self",
-            "super"
-        };
-    }
 
     std::string& currentText() {
         FileContext* fc = currentContext();
@@ -463,7 +505,7 @@ public:
             return NULL;
         }
 
-        return &it->second;
+        return it->second;
     }
 
     FileContext* currentContext() {
@@ -472,7 +514,20 @@ public:
             return NULL;
         }
 
-        return &it->second;
+        return it->second;
+    }
+
+    FileContext* setCurrentContext(const std::string& filename, const std::string& text) {
+        if (files.count(filename)!= 0) {
+            currentFilename = "";
+            throw Lexer::Error(*this, "file already lexed, duplicate?");
+        }
+        FileContext* fc = new FileContext();
+        fc->fileName = filename;
+        fc->text = text;
+        files.insert(std::make_pair(fc->fileName, fc));
+        currentFilename = filename;
+        return fc;
     }
 
     void pushState(State s)
@@ -656,7 +711,7 @@ public:
             case A_Z: case A_Z_DIGIT: {
                 currentToken.type = Token::IDENTIFIER;
 
-                if (std::find(keywords.begin(), keywords.end(), currentToken.text.str()) != keywords.end()) {
+                if (std::find(language::Keywords.begin(), language::Keywords.end(), currentToken.text.str()) != language::Keywords.end()) {
                     currentToken.type = Token::KEYWORD;
                     if (currentToken.text.str() == "true" || currentToken.text.str() == "false") {
                         currentToken.type = Token::BOOLEAN_LITERAL;
@@ -1231,10 +1286,7 @@ public:
     {
         clear();
 
-        currentFilename = fileName;
-        files[currentFilename];
-
-        currentContext()->text = text;
+        setCurrentContext(fileName, text);
 
         while (hasMoreText()) {
             const char& ch = currentText()[currentChIndex];
@@ -1252,7 +1304,7 @@ public:
 
 };
 
-
+} //end of lexer namespace
 
 #endif //_LEXER_H__
 

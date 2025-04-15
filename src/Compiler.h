@@ -51,9 +51,32 @@ namespace utils {
 	class cmd_line_options;
 }
 
+
+namespace parser {
+	class ModuleBlock;
+	class ClassBlock;
+	class RecordBlock;
+	class VariableNode;
+	class InstanceNode;
+	class MessageDeclaration;
+	class MessageBlock;
+	class SendMessage;
+}
+
 namespace language {
 
 	namespace compiler {
+
+		class CompilerOptions {
+		public:
+			bool compileOnly = false;
+			bool noLogo = false;
+			bool verboseMode = false;
+			bool debugMode = false;
+			bool printAST = false;
+			void init(const utils::cmd_line_options& cmdline);
+		};
+
 
 		typedef std::string CppString;
 		 
@@ -65,29 +88,76 @@ namespace language {
 			OUT_OBJECT,
 		};
 
+		class Flag {
+		public:
+			CppString val;
+		};
+
+		
+
+
+		class Type {
+		public:
+			enum TypeOf {
+				typeUnknown,
+				typeRecord,
+				typeClass,
+				typeBit1,
+				typeInteger8		= 8,
+				typeUInteger8		= 9,
+				typeInteger16		= 16,
+				typeUInteger16		= 17,
+				typeShort			= typeInteger16,
+				typeUShort			= typeUInteger16,
+				typeInteger32		= 32,
+				typeUInteger32		= 33,
+				typeInteger64		= 64,
+				typeUInteger64		= 65,
+				typeInteger128		= 128,
+				typeUInteger128		= 129,
+
+				typeDouble32		= 34,
+				typeFloat			= typeDouble32,
+				typeDouble64		= 66,
+				typeDouble			= typeDouble64,
+				typeBool = 100,
+				typeString,
+				typeArray,
+				typeDictionary,
+			};
+
+			CppString name;
+			CppString namespaceName;
+			TypeOf type = Type::typeUnknown;
+
+			Type() {}
+			Type(const CppString& n, TypeOf t) :name(n), type(t) {}
+			Type(const CppString& n, const CppString& nn, TypeOf t) :name(n), namespaceName(nn),type(t) {}
+
+			bool isPrimitive() const {
+				return type == typeRecord || type == typeClass;
+			}
+
+			CppString fullyQualifiedName() const {
+				CppString result = "";
+				if (!namespaceName.empty()) {
+					result = namespaceName + ".";
+				}
+				result += name;
+				return result;
+			}
+
+			static const Type& null() {
+				static Type result;
+
+				return result;
+			}
+		};
+
+
 		class Primitive {
 		public:
-			enum Type {
-				typeBit1,
-				typeInteger8=8,
-				typeUInteger8=9,
-				typeInteger16=16,
-				typeUInteger16=17,
-				typeShort = typeInteger16,
-				typeUShort = typeUInteger16,
-				typeInteger32=32,
-				typeUInteger32=33,
-				typeInteger64=64,
-				typeUInteger64=65,
-				typeInteger128 = 128,
-				typeUInteger128 = 129,
-
-				typeDouble32 = 34,
-				typeFloat = typeDouble32,
-				typeDouble64 = 66,
-				typeDouble = typeDouble64,
-
-			};
+			
 
 			union Data{
 				struct Type128{
@@ -119,7 +189,11 @@ namespace language {
 			Data data;
 		};
 
-		class Object {
+		class Record {
+
+		};
+
+		class Object : Record {
 
 		};
 
@@ -148,16 +222,25 @@ namespace language {
 
 		};
 
+		typedef dictionary<Flag> Flags;
 
+		
+
+
+
+
+		class ScopedEnvironment;
+
+		class Variable {
+		public:
+			Flags flags;
+			CppString name;
+			Type type;
+			ScopedEnvironment* scope = nullptr;
+		};
 
 		class Instance {
 		public:
-			
-			
-			enum Type {
-				instPrimitive=0,
-				instObject
-			};
 
 			union Value {
 				Object* objPtr;
@@ -167,20 +250,8 @@ namespace language {
 			CppString name;
 			Type type;
 			Value value;
-
+			ScopedEnvironment* scope=nullptr;
 		};
-
-
-
-
-
-
-		class Flag {
-		public:
-			CppString val;
-		};
-
-		typedef dictionary<Flag> Flags;
 
 		class MessageParameter {
 		public:
@@ -199,6 +270,15 @@ namespace language {
 			std::unordered_map<CppString, MessageParameter> parameters;
 		};
 
+
+		class SendMessage {
+		public:
+			bool async = false;
+
+			Message msg;
+			const Instance* instance = nullptr;
+			ScopedEnvironment* scope = nullptr;
+		};
 
 		class Block {
 		public:
@@ -282,6 +362,7 @@ namespace language {
 			Module(Compiler& c) { init(c); }
 
 			CppString name = "a";
+			CppString version;
 			std::map<CppString, Import> imports;
 			std::map<CppString, NamespaceBlock> namespaces;
 
@@ -341,7 +422,7 @@ namespace language {
 
 		class ScopedEnvironment {
 		public:
-			ScopedEnvironment() {}
+			ScopedEnvironment(const Compiler& c):compiler(c) {}
 
 			~ScopedEnvironment() {
 				clear();
@@ -351,7 +432,10 @@ namespace language {
 
 			std::vector<ScopedEnvironment*> children;
 
+			
+
 			void add(ScopedEnvironment* scope) {
+				scope->parent = this;
 				children.push_back(scope);
 			}
 
@@ -362,6 +446,116 @@ namespace language {
 
 				children.clear();
 			}
+
+			bool hasType(const CppString& name, bool recursive=false) const {
+				if (recursive) {
+					bool res = types.count(name) != 0;
+					if (!res) {						
+						if (nullptr != parent) {
+							return parent->hasType(name, true);
+						}
+					}
+				}
+				return types.count(name) != 0;
+			}
+			const Type& getType(const CppString& name, bool recursive = false) const {
+				if (recursive) {
+					bool res = types.count(name) != 0;
+					if (!res) {
+						if (nullptr != parent) {
+							return parent->getType(name, true);
+						}
+					}
+				}
+				if (types.count(name) == 0) {
+					return Type::null();
+				}
+				return types.find(name)->second;
+			}
+
+			void addType(const Type& t);
+
+			bool hasInstance(const CppString& name) const {
+				return instances.count(name) != 0;
+			}
+
+			bool hasVariable(const CppString& name) const {
+				return variables.count(name) != 0;
+			}
+
+			const Instance& getInstance(const CppString& name) const {
+				return instances.find(name)->second;
+			}
+
+			const Variable& getVariable(const CppString& name) const {
+				return variables.find(name)->second;
+			}
+
+			const std::map<CppString, Type>& getTypes() const {
+				return types;
+			}
+
+			const std::map<CppString, Instance>& getInstances() const {
+				return instances;
+			}
+
+			const std::map<CppString, Variable>& getVariables() const {
+				return variables;
+			}
+
+			void addInstance(const Instance& i);
+
+			void addVariable(const Variable& v);
+
+			void debugPrint() const {
+				std::string tab = "";// "\t";
+				auto p = parent;
+				while (p) {
+					p = p->parent;
+					tab += "\t";
+				}
+				std::cout << tab << "\ttypes" << std::endl;
+				for (const auto& t : getTypes()) {
+					std::cout << tab << "\t" << t.second.name << " " << t.second.type << std::endl;
+				}
+				std::cout << tab << "\tinstances" << std::endl;
+				for (const auto& i : getInstances()) {
+					std::cout << tab << "\t" << i.second.name << " " << i.second.type.type << std::endl;
+				}
+
+				std::cout << tab << "\tvariables" << std::endl;
+				for (const auto& v : getVariables()) {
+					std::cout << tab << "\t" << v.second.name << " " << v.second.type.fullyQualifiedName() << ":" << v.second.type.type << std::endl;
+				}
+
+				std::cout << tab << "\tsend messages" << std::endl;
+				for (const auto& msg : getMsgSends()) {
+					std::cout << tab << "\t" << msg.first /* << " " << v.second.type.fullyQualifiedName() << ":" << v.second.type.type*/ << std::endl;
+				}
+			}
+
+			bool hasSendMessage(const CppString& name) const {
+				return msgSends.count(name) != 0;
+			}
+
+			const SendMessage& getSendMessage(const CppString& name) const {
+				return msgSends.find(name)->second;
+			}
+
+			const std::map<CppString, SendMessage>& getMsgSends() const {
+				return msgSends;
+			}
+
+			void addSendMessage(const SendMessage& msg);
+		private:
+			const Compiler& compiler;
+			std::map<CppString, Type> types;
+			std::map<CppString, Instance> instances;
+			std::map<CppString, Variable> variables;
+			std::map<CppString, SendMessage> msgSends;
+			
+			
+			
 		};
 
 
@@ -369,11 +563,7 @@ namespace language {
 			UNKNOWN_ERR = 0,
 		};
 
-		class CompilerOptions {
-		public:
-			bool compileOnly = false;
-			void init(utils::cmd_line_options& cmdline);
-		};
+		
 
 
 		class Compiler {
@@ -385,7 +575,7 @@ namespace language {
 				
 				CompilerErrorType errCode = UNKNOWN_ERR;
 
-				Error(Compiler& c, const std::string& err) :compiler(c), message(err){}
+				Error(const Compiler& c, const std::string& err) :compiler(c), message(err){}
 
 
 				void output() const {
@@ -393,13 +583,10 @@ namespace language {
 				}
 			};
 
-			Compiler() {
-				init();
-			}
+			Compiler(const utils::cmd_line_options&);
 
-			~Compiler() {
-				terminate();
-			}
+			~Compiler();
+
 
 			void build(const std::vector<std::string>& files);
 
@@ -429,12 +616,28 @@ namespace language {
 			void outputModule(OutputFormat outFmt, llvm::Module&, const std::string& outfileName);
 
 			CompilerOptions options;
+
+			static std::string version();
+			static std::string logo();
+
+			
 		private:
 			friend class Stage1;
-
+			const utils::cmd_line_options& cmdlineOpts;
 			
-
+			void stage1NewModule(const parser::ModuleBlock& node);
+			void stage1NewClass(const parser::ClassBlock& node);
+			void stage1CloseClassBlock(const parser::ClassBlock& node);
 			
+			void stage1NewMessageBlock(const parser::MessageBlock& node);
+			void stage1CloseMessageBlock(const parser::MessageBlock& node);
+			void stage1NewMessageDecl(const parser::MessageDeclaration& node);
+			void stage1NewSendMessage(const parser::SendMessage& node);
+			void stage1NewRecord(const parser::RecordBlock& node);
+			void stage1Variable(const parser::VariableNode& node);
+			void stage1Instance(const parser::InstanceNode& node);
+			
+			std::string name;
 			std::unique_ptr<llvm::LLVMContext> llvmCtxPtr;
 			std::unique_ptr<llvm::Module> mainEntryModulePtr;
 			std::unique_ptr<llvm::IRBuilder<>> llvmBuilderPtr;
@@ -448,6 +651,7 @@ namespace language {
 			Program* libInst = NULL;
 
 			ScopedEnvironment globalEnv;
+			ScopedEnvironment* currentScope = nullptr;
 
 			llvm::Function* mainEntryFunc = nullptr;
 
@@ -455,16 +659,21 @@ namespace language {
 			std::map< CppString, Class> classes;
 
 			void init();
+			void initBasicTypes();
 
 			void terminate();
-
-			void stage1VisitNode(const language::ParseNode& p);
 
 			void clearEnvironment();
 
 			void createMainEntryPoint();
 
 			void outputMainEntryPoint(OutputFormat outFmt, std::string& outfileName);
+
+			ScopedEnvironment* createNewScope();
+			ScopedEnvironment* pushNewScope();
+			ScopedEnvironment* popCurrentScope();
+			void closeCurrentScope();
+			void closeScope(const ScopedEnvironment& scope);
 		};
 
 

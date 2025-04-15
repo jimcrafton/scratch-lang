@@ -81,4 +81,8 @@ a incr
 d incr
 
 
+runtime.main := msg (args:array) {
+	
+}
+
 
