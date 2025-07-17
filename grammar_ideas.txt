@@ -74,12 +74,12 @@ dir_name  ::== '/'|'\' file_name
 file_name  ::== (alpha|digit[alpha|digits|'_'|'.'|' '])+
 
 
-code_fragment_block ::== open_block [namespace_block]+ [statements_block]+ close_block
+code_fragment_block ::== open_block [namespace_block]+ [class_block|statements_block]+ close_block
 
 namespace_block ::== namespace_id identifier open_block statements_block|namespace_block close_block
 namespace_id  ::== 'namespace'
 
-statements_block ::== (class_block|statement|comment)+
+statements_block ::== (statement)+
 
 
 
@@ -150,18 +150,16 @@ end_comments  ::==  '}#'
 
 end_of_statement ::== ';'
 
-statement ::==  expression|variable_def|assignment end_of_statement
+statement ::==  variable_def | assignment-expression | expression | return-expression    end_of_statement
 
 
 
 open_paren ::== '('
 close_paren ::== ')'
 
-assignment ::== instance assignment-op instance
+assignment-expression ::== lhs-expression assignment-op rhs-expression
 
 assignment-op ::== ':='
-
-send_message ::== instance message|operator-message
 
 
 variable ::== [namespace_name'.']identifier|var_literal
@@ -182,13 +180,17 @@ decimal_literal ::== digits [decimal digits]
 hexadecimal_literal  ::== '0x|X' digit|'A..F' [digit|'A..F']+
 binary_literal  ::== '0b|B' 0|1 [0|1]+
 string_literal  ::== '"' [any_char]+ '"'
-array_literal  ::== open_bracket [instance][',' instance]+ close_bracket   i.e. "[]", "[1]", or "[1,4,5]"
+array_literal  ::== open_bracket [instance-expr][',' instance-expr]+ close_bracket   i.e. "[]", "[1]", or "[1,4,5]"
 
-expression ::== send_message | group_expression | (return_id expression)
+expression ::== message-expression | group-expression
 
-group_expression  ::== open_paren expression close_paren
+message-expression  ::==  lhs-expression message
 
-return_id ::== 'return'
+group-expression  ::== open_paren expression close_paren
+
+return-expression  ::==  return-id expression
+
+return-id ::== 'return'
 
 open_paren ::== '('
 close_paren ::== ')'
@@ -199,24 +201,26 @@ close_block ::== '}'
 open_bracket ::== '['
 close_bracket ::== ']'
 
-send_message ::== instance message|operator-message
-
-
-
-instance ::== variable_id|variable_def|var_literal|expression|instance_var
+lhs-expression ::== instance-expr 
+instance-expr ::== variable_id|instance_var|variable_def|var_literal|expression
 
 instance_var  ::== (instance '.')+ identifier
 
-message ::== message_name|message_name_params
-message_name ::== identifier
 
-message_name_params ::== identifier':' message_param [identifier':' message_param]+
-message_param :== instance
+message ::== message-unary | message-binary | message-keywords
+message-unary ::== message-name
+message-name  ::== identifier
+message-binary ::== message-name ':' message-param
+
+message-keywords ::==  message-name ':' message_param1 (message_param_name ':' message-param)+
+message_param_name  ::== '@' identifier
+message_param1  ::== message-param
+message-param :== variable_id|instance_var|var_literal|expression
 
 
 operator-message ::== operator operand 
 operator ::== addition-op|subtraction-op|multiplication-op|division-op|mod-op
-operand ::== instance
+operand ::== message-param
 
 addition-op ::== '+'
 subtraction-op ::== '-'

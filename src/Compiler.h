@@ -25,9 +25,14 @@
 #include <map>
 #include <unordered_map>
 #include <string>
+#include <atomic>
+#include <chrono>
+
+
 
 #include "AST.h"
-
+#include "compiletime.h"
+#include "runtime.h"
 
 
 
@@ -69,11 +74,24 @@ namespace language {
 
 		class CompilerOptions {
 		public:
+
+			static constexpr auto COMP_OPT_HELP = "help";
+			static constexpr auto COMP_OPT_VERSION = "version";
+			static constexpr auto COMP_OPT_PRINT_AST = "print-ast";
+			
+			static constexpr auto COMP_OPT_NO_LOGO = "no-logo";
+			static constexpr auto COMP_OPT_VERBOSE_MODE = "verbose-mode";
+			static constexpr auto COMP_OPT_DEBUG_MODE = "debug-mode";
+			static constexpr auto COMP_OPT_COMPILE_ONLY = "compile-only";
+			
+			
+
 			bool compileOnly = false;
 			bool noLogo = false;
 			bool verboseMode = false;
 			bool debugMode = false;
 			bool printAST = false;
+			
 			void init(const utils::cmd_line_options& cmdline);
 		};
 
@@ -93,57 +111,134 @@ namespace language {
 			CppString val;
 		};
 
-		
+		typedef std::map<CppString,Flag> Flags;
+		class ScopedEnvironment;
+		class Namespace;
+		class Type;
+		class Variable;
+		class Instance;
+		class Message;
+		class SendMessage;
+		class Module;
 
 
-		class Type {
+		class CodeVisitor {
 		public:
-			enum TypeOf {
-				typeUnknown,
-				typeRecord,
-				typeClass,
-				typeBit1,
-				typeInteger8		= 8,
-				typeUInteger8		= 9,
-				typeInteger16		= 16,
-				typeUInteger16		= 17,
-				typeShort			= typeInteger16,
-				typeUShort			= typeUInteger16,
-				typeInteger32		= 32,
-				typeUInteger32		= 33,
-				typeInteger64		= 64,
-				typeUInteger64		= 65,
-				typeInteger128		= 128,
-				typeUInteger128		= 129,
+			virtual ~CodeVisitor() {}
 
-				typeDouble32		= 34,
-				typeFloat			= typeDouble32,
-				typeDouble64		= 66,
-				typeDouble			= typeDouble64,
-				typeBool = 100,
-				typeString,
-				typeArray,
-				typeDictionary,
-			};
+			virtual void visitNamespace(const Namespace&) {}
+			virtual void visitType(const Type&) {}
+			virtual void visitVariable(const Variable&) {}
+			virtual void visitInstance(const Instance&) {}
+			virtual void visitMessage(const Message&) {}
+			virtual void visitSendMessage(const SendMessage&) {}
+		};
 
+		/*
+		* common base class that links back to the AST object and into the actual source file
+		*/
+		class CodeElement {
+		public:
+			CodeElement() {}
+			CodeElement(const CppString& n) :name(n){}
+			
+			virtual ~CodeElement() {}
+
+
+			void setLocation(const lexer::CodeLocation& rhs) {
+				code = rhs;
+			}
+
+			const lexer::CodeLocation& location() const {
+				return code;
+			}
+
+			inline void setName(const CppString& v) { name = v; }
+			inline const CppString& getName() const { return name; }
+
+			inline void setScope(const ScopedEnvironment* v) { scope = v; }
+			inline const ScopedEnvironment* getScope() const { return scope; }
+
+
+			virtual void accept(CodeVisitor& v) const {}
+		protected:
+			Flags flags;
 			CppString name;
-			CppString namespaceName;
-			TypeOf type = Type::typeUnknown;
+
+
+			lexer::CodeLocation code;
+			const ScopedEnvironment* scope = nullptr;
+		};
+
+		
+		class Namespace : public CodeElement {
+		public:
+
+			static constexpr char Separator = '.';
+
+			Namespace() {}
+			Namespace(const CppString& n) :CodeElement(n) {}
+			virtual ~Namespace() {}
+
+			Namespace& operator=(const CppString& v) {
+				name = v;
+				return *this;
+			}
+
+			Namespace& addComponent(const CppString& v) {
+				if (!name.empty()) {
+					name += Namespace::Separator;
+				}
+				name += v;
+				return *this;
+			}
+			
+
+			operator const CppString& () const {
+				return name;
+			}
+
+
+			CppString fullyQualified(const CppString& component) const {
+				if (!name.empty()) {
+					return name + Namespace::Separator + component;
+				}
+				return component;
+			}
+
+			bool empty() const { return name.empty(); }
+
+
+			virtual void accept(CodeVisitor& v) const {
+				v.visitNamespace(*this);
+			}
+		private:
+			
+		};
+
+
+
+
+		class Type : public CodeElement {
+		public:
+			
+
+			Namespace typeNamespace;
+			language::compiletime::TypeDescriptor type = language::compiletime::TypeDescriptor::typeUnknown;
 
 			Type() {}
-			Type(const CppString& n, TypeOf t) :name(n), type(t) {}
-			Type(const CppString& n, const CppString& nn, TypeOf t) :name(n), namespaceName(nn),type(t) {}
+			Type(const Type& rhs):CodeElement(rhs), typeNamespace(rhs.typeNamespace), type(rhs.type){}
+			Type(const CppString& n, language::compiletime::TypeDescriptor t) :CodeElement(n), type(t) {}
+			Type(const CppString& n, const CppString& nn, language::compiletime::TypeDescriptor t) :CodeElement(n), typeNamespace(nn),type(t) {}
+			virtual ~Type() {}
 
 			bool isPrimitive() const {
-				return type == typeRecord || type == typeClass;
+				return type != language::compiletime::TypeDescriptor::typeRecord && 
+					type != language::compiletime::TypeDescriptor::typeClass;
 			}
 
 			CppString fullyQualifiedName() const {
-				CppString result = "";
-				if (!namespaceName.empty()) {
-					result = namespaceName + ".";
-				}
-				result += name;
+				CppString result = typeNamespace.fullyQualified(name);
 				return result;
 			}
 
@@ -152,137 +247,133 @@ namespace language {
 
 				return result;
 			}
+
+			virtual void accept(CodeVisitor& v) const {
+				v.visitType(*this);
+			}
 		};
 
 
-		class Primitive {
+		
+
+		class Primitive : public CodeElement {
 		public:
 			
 
-			union Data{
-				struct Type128{
-					int64_t lo;
-					int64_t hi;
-				};
+			union Data{				
 
-				struct TypeU128 {
-					uint64_t lo;
-					uint64_t hi;
-				};
+				language::typesystem::boolT boolV;
+				language::typesystem::int8T int8V;
+				language::typesystem::uint8T uint8V;
+				language::typesystem::int16T int16V;
+				language::typesystem::uint16T uint16V;
+				language::typesystem::int32T int32V;
+				language::typesystem::uint32T uint32V;
+				language::typesystem::int64T int64V;
+				language::typesystem::uint64T uint64V;
+				language::typesystem::int128T int128V;
+				language::typesystem::uint128T uint128V;
 
-				bool boolV;
-				int8_t intV;
-				uint8_t uintV;
-				int16_t int16V;
-				uint16_t uint16V;
-				int32_t int32V;
-				uint32_t uint32V;
-				int64_t int64V;
-				uint64_t uint64V;				
-				Type128 int128V;
-				TypeU128 uint128V;
-
-				float floatV;
-				double doubleV;
+				language::typesystem::float32T floatV;
+				language::typesystem::double64T doubleV;
 			};
 
 			Data data;
+			Type type;
 		};
 
-		class Record {
+		
 
-		};
-
-		class Object : Record {
-
-		};
-
-
-
-
-		template<typename T>
-		class list {
-		public:
-
-		};
-
-		template<typename T>
-		class array : public list<T> {
-		public:
-			std::vector<T> data;
-		};
-
-		template<typename T>
-		class dictionary : public list<T> {
-		public:
-			std::map<CppString,T> data;
-		};
-
-		class string {
-
-		};
-
-		typedef dictionary<Flag> Flags;
+		
 
 		
 
 
 
 
-		class ScopedEnvironment;
+		
 
-		class Variable {
-		public:
-			Flags flags;
-			CppString name;
+		
+
+
+		class Variable : public CodeElement {
+		public:			
 			Type type;
-			ScopedEnvironment* scope = nullptr;
+			
+			virtual ~Variable() {}
+
+			bool empty() const {
+				return flags.empty() && name.empty() && type.type == language::compiletime::TypeDescriptor::typeUnknown && scope == nullptr;
+			}
+			static const Variable& null() {
+				static Variable res;
+				return res;
+			}
+
+			virtual void accept(CodeVisitor& v) const {
+				v.visitVariable(*this);
+			}
 		};
 
-		class Instance {
+		class Instance : public CodeElement {
 		public:
 
 			union Value {
-				Object* objPtr;
-				Primitive* primitivePtr;
+				const language::runtime::datatypes::object* objPtr;
+				const language::runtime::datatypes::string* stringPtr;
+				const Primitive* primitivePtr;
 			};
 
-			CppString name;
 			Type type;
 			Value value;
-			ScopedEnvironment* scope=nullptr;
+
+			virtual void accept(CodeVisitor& v) const {
+				v.visitInstance(*this);
+			}
+
+
+			llvm::Value* getValue(llvm::IRBuilder<>* builder) const ;
 		};
 
-		class MessageParameter {
+		class MessageParameter : public CodeElement {
 		public:
-			CppString name;
-			Flags flags;
+			Instance* param = nullptr;
 
 			Instance defValue;
 		};
 
 
-		class Message {
+		class Message : public CodeElement {
 		public:
-			CppString name;
-			Flags flags;
+			
+			virtual ~Message() {}
 
 			std::unordered_map<CppString, MessageParameter> parameters;
+
+			virtual void accept(CodeVisitor& v) const {
+				v.visitMessage(*this);
+			}
 		};
 
 
-		class SendMessage {
+		class SendMessage : public CodeElement {
 		public:
+
+			virtual ~SendMessage() {}
+
+
 			bool async = false;
 
 			Message msg;
 			const Instance* instance = nullptr;
-			ScopedEnvironment* scope = nullptr;
+			virtual void accept(CodeVisitor& v) const {
+				v.visitSendMessage(*this);
+			}
 		};
 
-		class Block {
+		class Block : public CodeElement {
 		public:
-			Flags flags;
+			
 		};
 
 		class VariablesBlock : public Block {
@@ -303,7 +394,7 @@ namespace language {
 
 		class MessageBlock : public Block {
 		public:		
-			CppString name;
+			
 
 			PreConditionBlock preConditions;
 			PostConditionBlock postConditions;
@@ -317,7 +408,7 @@ namespace language {
 
 		class ClassBlock : public Block {
 		public:
-			CppString name;
+			
 			CppString superClassName;
 
 			std::map<CppString, VariablesBlock> memberVars;
@@ -329,7 +420,7 @@ namespace language {
 		class CodeFragmentBlock : public Block {
 		public:
 			VariablesBlock vars;
-			CppString name;
+			
 
 			std::unordered_map<CppString, ClassBlock> classDefs;
 		};
@@ -337,7 +428,7 @@ namespace language {
 
 		class NamespaceBlock : public Block {
 		public:
-			CppString name;
+			
 			CppString parent;
 
 			
@@ -349,34 +440,63 @@ namespace language {
 
 		};
 
-		class Import {
+		class Import : public CodeElement {
 		public:
-			CppString name;
+			
 			CppString localPath;
 			CppString remotePath;
 		};
 
-		class Module {
+		class Module : public CodeElement {
 		public:
 			
-			Module(Compiler& c) { init(c); }
+			Module(Compiler& c):compiler(c){ init(compiler); }
+			virtual ~Module();
 
-			CppString name = "a";
 			CppString version;
-			std::map<CppString, Import> imports;
-			std::map<CppString, NamespaceBlock> namespaces;
+			
 
-			std::unique_ptr<llvm::Module> modulePtr;
+			std::unique_ptr<llvm::Module> llvmModulePtr;
 
 			void init(Compiler& c);
 
 			void output(Compiler& c, OutputFormat outFmt, std::string& outputFileName);
+
+			const std::map<CppString, Import>& getImports() const { return imports; }
+			const std::map<CppString, NamespaceBlock>& getNamespaces() const { return namespaces; }
+
+			
+			const ScopedEnvironment* globalScope() const { return globalEnv; }
+			ScopedEnvironment* globalScope() { return globalEnv; }
+			
+			const ScopedEnvironment* getCurrentScope() const { return currentScope; }
+			ScopedEnvironment* getCurrentScope() { return currentScope; }
+
+			void resetScope();
+
+			void closeScope(const ScopedEnvironment& scope);
+			void closeCurrentScope();
+			ScopedEnvironment* popCurrentScope();
+			ScopedEnvironment* createNewScope();
+			ScopedEnvironment* pushNewScope();
+		private:
+			ScopedEnvironment* globalEnv = nullptr;
+			ScopedEnvironment* currentScope = nullptr;
+			Compiler& compiler;
+
+			std::map<CppString, Import> imports;
+			std::map<CppString, NamespaceBlock> namespaces;
 		};
 
 		
 
-		class ExecutableFragment {
+		class ExecutableFragment : public CodeElement {
 		public:
+
+			ExecutableFragment() {
+				name = "a";
+			}
+
 			virtual ~ExecutableFragment() {
 				for (auto m : modules) {
 					delete m.second;
@@ -385,7 +505,7 @@ namespace language {
 			}
 
 			typedef std::map<CppString, Module*> ModuleMapT;
-			CppString name="a";
+			
 			CppString version="1.0.0";
 
 			ModuleMapT modules;
@@ -408,9 +528,9 @@ namespace language {
 
 
 
-		class Class {
+		class Class : public CodeElement {
 		public:
-			CppString name;
+			
 
 			std::map<CppString, Message > message;
 
@@ -418,11 +538,13 @@ namespace language {
 
 
 		class Stage1;
+		class ModuleCheck;
+
 
 
 		class ScopedEnvironment {
 		public:
-			ScopedEnvironment(const Compiler& c):compiler(c) {}
+			ScopedEnvironment(const Compiler& c):compiler(c), parent(nullptr){}
 
 			~ScopedEnvironment() {
 				clear();
@@ -432,7 +554,11 @@ namespace language {
 
 			std::vector<ScopedEnvironment*> children;
 
+			CppString name;
 			
+
+			Module* module=nullptr;
+
 
 			void add(ScopedEnvironment* scope) {
 				scope->parent = this;
@@ -440,6 +566,9 @@ namespace language {
 			}
 
 			void clear() {
+				name.clear();
+				module = nullptr;
+
 				for (auto child : children) {
 					delete child;
 				}
@@ -487,7 +616,16 @@ namespace language {
 				return instances.find(name)->second;
 			}
 
-			const Variable& getVariable(const CppString& name) const {
+			const Variable& getVariable(const CppString& name, bool recursive=false) const {
+				
+				if (variables.count(name) == 0) {
+					if (recursive) {
+						if (nullptr != parent) {
+							return parent->getVariable(name, true);
+						}
+					}
+					return Variable::null();
+				}
 				return variables.find(name)->second;
 			}
 
@@ -507,32 +645,10 @@ namespace language {
 
 			void addVariable(const Variable& v);
 
-			void debugPrint() const {
-				std::string tab = "";// "\t";
-				auto p = parent;
-				while (p) {
-					p = p->parent;
-					tab += "\t";
-				}
-				std::cout << tab << "\ttypes" << std::endl;
-				for (const auto& t : getTypes()) {
-					std::cout << tab << "\t" << t.second.name << " " << t.second.type << std::endl;
-				}
-				std::cout << tab << "\tinstances" << std::endl;
-				for (const auto& i : getInstances()) {
-					std::cout << tab << "\t" << i.second.name << " " << i.second.type.type << std::endl;
-				}
 
-				std::cout << tab << "\tvariables" << std::endl;
-				for (const auto& v : getVariables()) {
-					std::cout << tab << "\t" << v.second.name << " " << v.second.type.fullyQualifiedName() << ":" << v.second.type.type << std::endl;
-				}
+			CppString getFullName() const;
 
-				std::cout << tab << "\tsend messages" << std::endl;
-				for (const auto& msg : getMsgSends()) {
-					std::cout << tab << "\t" << msg.first /* << " " << v.second.type.fullyQualifiedName() << ":" << v.second.type.type*/ << std::endl;
-				}
-			}
+			void debugPrint() const; 
 
 			bool hasSendMessage(const CppString& name) const {
 				return msgSends.count(name) != 0;
@@ -547,6 +663,29 @@ namespace language {
 			}
 
 			void addSendMessage(const SendMessage& msg);
+
+			void addStringLiteral(const CppString& name, const language::runtime::datatypes::string& strlit);
+
+			bool hasStringLiteral(const CppString& name) const {
+				return strings.count(name) != 0;
+			}
+
+			const language::runtime::datatypes::string& getStringLiteral(const CppString& name) const {
+				return strings.find(name)->second;
+			}
+
+
+			void addPrimLiteral(const CppString& name, const Primitive& prim);
+
+			bool hasPrimLiteral(const CppString& name) const {
+				return primitives.count(name) != 0;
+			}
+
+			const Primitive& getPrimLiteral(const CppString& name) const {
+				return primitives.find(name)->second;
+			}
+
+			bool resolveVariable(const Variable& var, Variable& outVar);
 		private:
 			const Compiler& compiler;
 			std::map<CppString, Type> types;
@@ -554,6 +693,9 @@ namespace language {
 			std::map<CppString, Variable> variables;
 			std::map<CppString, SendMessage> msgSends;
 			
+			std::map<CppString, language::runtime::datatypes::string> strings;
+
+			std::map<CppString, Primitive> primitives;
 			
 			
 		};
@@ -561,6 +703,8 @@ namespace language {
 
 		enum CompilerErrorType {
 			UNKNOWN_ERR = 0,
+			NO_VARIABLE_TYPE_NAME,
+			NO_VARIABLE_TYPE_DEFINED,
 		};
 
 		
@@ -578,10 +722,20 @@ namespace language {
 				Error(const Compiler& c, const std::string& err) :compiler(c), message(err){}
 
 
-				void output() const {
-					std::cout << "Compiler error: " << message << std::endl;
-				}
+				void output() const;
 			};
+			
+			class ErrorItem {
+			public:
+
+				std::string message;
+				lexer::CodeLocation code;				
+				CompilerErrorType errCode = UNKNOWN_ERR;
+				const CodeElement* element = nullptr;
+			private:
+				
+			};
+
 
 			Compiler(const utils::cmd_line_options&);
 
@@ -598,12 +752,16 @@ namespace language {
 			//called "a" as well
 			void stage1(const language::AST& ast);
 
+			void stage2();
 
-			void compile(const language::AST& ast);
+			void stage3();
 
-			void dumpCompilerOutput();
+			void compileAST(const language::AST& ast);
 
-			void dumpCompilerObjectCode();
+			void compile();
+
+			void link();
+
 
 			llvm::Module* createModule(const std::string& name);
 
@@ -620,9 +778,15 @@ namespace language {
 			static std::string version();
 			static std::string logo();
 
-			
+			static std::string mainEntryFunction();
+
+			void outputErrors() const;
+
+			const ScopedEnvironment* getGlobalScope() const { return &globalEnv; }
+			ScopedEnvironment* getGlobalScope() { return &globalEnv; }
 		private:
 			friend class Stage1;
+			friend class  ModuleCheck;
 			const utils::cmd_line_options& cmdlineOpts;
 			
 			void stage1NewModule(const parser::ModuleBlock& node);
@@ -633,9 +797,16 @@ namespace language {
 			void stage1CloseMessageBlock(const parser::MessageBlock& node);
 			void stage1NewMessageDecl(const parser::MessageDeclaration& node);
 			void stage1NewSendMessage(const parser::SendMessage& node);
+			void stage1NewAssignmentMessage(const parser::Assignment& node);
 			void stage1NewRecord(const parser::RecordBlock& node);
+			void stage1CloseRecord(const parser::RecordBlock& node);
 			void stage1Variable(const parser::VariableNode& node);
 			void stage1Instance(const parser::InstanceNode& node);
+			void stage1Instance(const parser::MsgInstanceNode& node);
+
+			void stage1Literal(const parser::LiteralNode& node);
+			void stage1Nil(const parser::NilNode& node);
+			
 			
 			std::string name;
 			std::unique_ptr<llvm::LLVMContext> llvmCtxPtr;
@@ -650,13 +821,20 @@ namespace language {
 			Program* programInst = NULL;
 			Program* libInst = NULL;
 
+			
+			Module* currentModule = nullptr;
 			ScopedEnvironment globalEnv;
-			ScopedEnvironment* currentScope = nullptr;
 
 			llvm::Function* mainEntryFunc = nullptr;
 
 
 			std::map< CppString, Class> classes;
+			std::vector<ErrorItem> errorListing;
+
+
+			std::chrono::system_clock::time_point buildStart;
+			std::chrono::system_clock::time_point buildEnd;
+
 
 			void init();
 			void initBasicTypes();
@@ -669,18 +847,30 @@ namespace language {
 
 			void outputMainEntryPoint(OutputFormat outFmt, std::string& outfileName);
 
-			ScopedEnvironment* createNewScope();
-			ScopedEnvironment* pushNewScope();
-			ScopedEnvironment* popCurrentScope();
-			void closeCurrentScope();
-			void closeScope(const ScopedEnvironment& scope);
+			void printBuildStats();
+
+			std::string generateTempInstanceName(const language::ParseNode* node);
+
+			void buildFunctions(const ScopedEnvironment& scope);
+			void buildFunction(const Instance* receiver, const Message& msg, const ScopedEnvironment& scope);
+			void buildFunction(const Instance* receiver, const CppString& selector, const std::vector<const Instance*>& params, const ScopedEnvironment& scope);
 		};
 
 
+		class LinkerOptions {
+		public:			
+			bool noLogo = false;
+			bool verboseMode = false;
+			bool debugMode = false;			
+			void init(const utils::cmd_line_options& cmdline);
+		};
 
 		class Linker {
 		public:
-			Linker() { init(); }
+			Linker(const utils::cmd_line_options& opts) { 
+				options.init(opts);
+				init(); 
+			}
 
 			~Linker() { terminate(); }
 
@@ -690,9 +880,13 @@ namespace language {
 
 			std::vector<std::string> objs;
 		private:
+			LinkerOptions options;
+
 			void init();
 
 			void terminate();
+
+			void reportSuccessfulOutput();
 		};
 
 	}

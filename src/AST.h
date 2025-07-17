@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "Token.h"
 
 namespace parser {
 	class Comment;
@@ -32,6 +33,8 @@ namespace parser {
 	class ModuleBlock;
 	class MessageDeclaration;
 	class MessageBlock;
+	class MessageParam;
+	class MsgInstanceNode;
 }
 
 
@@ -60,32 +63,38 @@ namespace language {
 
 	class AstVisitor;
 
+	class Comment;
 
 	class ParseNode {
 	protected:
 
 	public:
+
 		const ParseNode* parent = nullptr;
 		CompileFlags flags;
 		std::string name;
 
+		lexer::Token token;
+
+		std::vector<Comment*> comments;
+
+
 		ParseNode() {}
 
-		virtual ~ParseNode() {}
+		virtual ~ParseNode(); 
 
 		bool hasFlags() const {
 			return !flags.flags.empty();
 		}
 
 		virtual bool hasChildren() const {
-			return false;
+			return !comments.empty();
 		}
 
-		virtual void clear() {
-		}
+		virtual void clear();
 
 		virtual void getChildren(std::vector<ParseNode*>& children) const {
-
+			children.insert(children.end(), comments.begin(), comments.end());
 		}
 
 		virtual std::string printInfo() const { return std::string(); };
@@ -110,7 +119,24 @@ namespace language {
 	};
 
 
+	class Comment : public ParseNode {
+	public:
+		std::string commentsText;
+		virtual ~Comment() {}
 
+		virtual bool hasChildren() const {
+			return false;
+		}
+		virtual std::string printInfo() const {
+			std::string result = "comment: " + commentsText;
+
+			return result;
+		};
+
+		virtual void accept(language::AstVisitor& v) const;
+	};
+
+	
 
 	class AstVisitor {
 	public:
@@ -133,14 +159,11 @@ namespace language {
 
 		virtual ~AstVisitor() {}
 
-		virtual void visitComment(const parser::Comment& node) {}
-		virtual void visitParseNodeWithComments(const parser::ParseNodeWithComments& node) {}
+		virtual void visitComment(const language::Comment& node) {}
 		virtual void visitTupleNode(const parser::TupleNode& node) {}
 		virtual void visitNamedTupleNode(const parser::NamedTupleNode& node) {}
-
 		virtual void visitVariableNode(const parser::VariableNode& node) {}
 		virtual void visitParameterNode(const parser::ParamNode& node) {}
-
 		virtual void visitInstanceNode(const parser::InstanceNode& node) {}
 		virtual void visitNilNode(const parser::NilNode& node) {}
 		virtual void visitLiteralNode(const parser::LiteralNode& node) {}
@@ -149,6 +172,7 @@ namespace language {
 		virtual void visitMessage(const parser::Message& node) {}
 		virtual void visitReturnExpression(const parser::ReturnExpression& node) {}
 		virtual void visitSendMessage(const parser::SendMessage& node) {}
+		virtual void visitMessageParam(const parser::MessageParam& node) {}
 		virtual void visitAssignment(const parser::Assignment& node) {}
 		virtual void visitStatementBlock(const parser::StatementBlock& node) {}
 		virtual void visitScopeNode(const parser::ScopeNode& node) {}
@@ -160,6 +184,8 @@ namespace language {
 		virtual void visitModuleBlock(const parser::ModuleBlock& node) {}
 		virtual void visitMessageDecl(const parser::MessageDeclaration& node) {}
 		virtual void visitMessageBlock(const parser::MessageBlock& node) {}
+		virtual void visitMsgInstanceNode(const parser::MsgInstanceNode& node) {}
+		
 	};
 
 

@@ -11,11 +11,45 @@
 
 #include <iostream>
 
+#include <chrono>
+#include <thread>
+
 #include "cmd_line_options.h"
 #include "version.h"
 
+#include "win32utils.h"
+#include <filesystem>
+#include <thread>
+
+
+
+
 namespace language {
 	namespace compiler {
+		class TypeReducer : public language::AstVisitor {
+		public:
+			virtual ~TypeReducer() {}
+			Compiler& compiler;
+			TypeReducer(Compiler& c) :compiler(c) {
+
+			}
+		};
+
+		class ModuleCheck : public language::AstVisitor {
+		public:
+			virtual ~ModuleCheck() {}
+			Compiler& compiler;
+			ModuleCheck(Compiler& c) :compiler(c) {
+
+			}
+
+			virtual void visitModuleBlock(const parser::ModuleBlock& node) {
+				if (state == language::AstVisitor::stateVisitStarted) {
+					compiler.stage1NewModule(node);
+				}
+			}
+
+		};
 
 		class Stage1 : public language::AstVisitor {
 		public:
@@ -26,19 +60,31 @@ namespace language {
 				
 			}
 
-			virtual void visitNilNode(const parser::NilNode& node) {
-				if (state == language::AstVisitor::stateVisitStarted) {
-					std::cout << "visitNilNode" << std::endl;
-				}
-				
-			}
-
+			
 			virtual void visitVariableNode(const parser::VariableNode& node) {
 				if (state == language::AstVisitor::stateVisitStarted) {
 					compiler.stage1Variable(node);
 				}
 				else {
 					
+				}
+			}
+
+			virtual void visitNilNode(const parser::NilNode& node) {
+				if (state == language::AstVisitor::stateVisitStarted) {
+					compiler.stage1Nil(node);
+				}
+				else {
+
+				}
+			}
+
+			virtual void visitLiteralNode(const parser::LiteralNode& node) {
+				if (state == language::AstVisitor::stateVisitStarted) {
+					compiler.stage1Literal(node);
+				}
+				else {
+
 				}
 			}
 
@@ -60,6 +106,9 @@ namespace language {
 			virtual void visitRecordBlock(const parser::RecordBlock& node) {
 				if (state == language::AstVisitor::stateVisitStarted) {
 					compiler.stage1NewRecord(node);
+				}
+				else if (state == language::AstVisitor::stateVisitComplete) {
+					compiler.stage1CloseRecord(node);
 				}
 			}
 
@@ -87,9 +136,26 @@ namespace language {
 				}
 			}
 
+			virtual void visitMsgInstanceNode(const parser::MsgInstanceNode& node) {
+				
+
+				if (state == language::AstVisitor::stateVisitStarted) {
+					compiler.stage1Instance(node);
+				}
+				else {
+
+				}
+			}
+
 			virtual void visitAssignment(const parser::Assignment& node) {
 				if (state == language::AstVisitor::stateVisitStarted) {
-					compiler.stage1NewSendMessage(node);
+					compiler.stage1NewAssignmentMessage(node);
+				}
+			}
+
+			virtual void visitMessageParam(const parser::SendMessage& node) {
+				if (state == language::AstVisitor::stateVisitStarted) {
+				//	compiler.stage1NewSendMessage(node);
 				}
 			}
 
@@ -103,18 +169,71 @@ namespace language {
 
 		void CompilerOptions::init(const utils::cmd_line_options& cmdline)
 		{
-			auto o = cmdline["compile-only"];
+			auto o = cmdline[CompilerOptions::COMP_OPT_COMPILE_ONLY];
+
 			if (!o.is_null()) { compileOnly = o; }
 			
-			o = cmdline["verbose-mode"];
+			o = cmdline[CompilerOptions::COMP_OPT_VERBOSE_MODE];
 			if (!o.is_null()) { verboseMode = o; }
 
-			o = cmdline["debug-mode"];
+			o = cmdline[CompilerOptions::COMP_OPT_DEBUG_MODE];
 			if (!o.is_null()) { debugMode = o; }
 
-			o = cmdline["print-ast"];
+			o = cmdline[CompilerOptions::COMP_OPT_PRINT_AST ];
 			if (!o.is_null()) { printAST = true; }
-			
+
+		}
+
+
+		
+
+
+
+		llvm::Value* Instance::getValue(llvm::IRBuilder<>* builder) const
+		{
+			llvm::Value* result = nullptr;
+
+			switch (type.type) {
+				case language::compiletime::TypeDescriptor::typeBool: {
+					result = value.primitivePtr->data.boolV ? builder->getTrue() : builder->getFalse();
+				}break;
+
+				case language::compiletime::TypeDescriptor::typeInteger8: {
+					result = builder->getInt8(value.primitivePtr->data.int8V);
+				}break;
+
+				case language::compiletime::TypeDescriptor::typeUInteger8: {
+
+					result = builder->getInt8(value.primitivePtr->data.uint8V);
+				}break;
+
+				case language::compiletime::TypeDescriptor::typeUInteger32: {
+
+					result = builder->getInt32 (value.primitivePtr->data.uint32V);
+				}break;
+
+				case language::compiletime::TypeDescriptor::typeInteger32: {
+
+					result = builder->getInt32(value.primitivePtr->data.int32V);
+				}break;
+
+				case language::compiletime::TypeDescriptor::typeString: {
+
+				}break;
+
+				default: {
+					result = nullptr;
+				}break;
+			}
+
+			return result;
+		}
+
+
+		void Compiler::Error::output() const 
+		{
+			std::cout << "Compiler error: " << message << std::endl;
+			compiler.outputErrors();
 		}
 
 		Compiler::Compiler(const utils::cmd_line_options& cmdline) :
@@ -143,13 +262,42 @@ namespace language {
 			return result;
 		}
 
+
+		void Compiler::outputErrors() const
+		{
+			if (!errorListing.empty()) {
+				//for (const auto& err : errorListing) {
+				for (size_t i = 0; i < errorListing.size();++i) {
+					const Compiler::ErrorItem& err = errorListing[i];
+
+					std::cout << "(" << err.errCode << ")\t" << err.message << std::endl;
+					std::cout << "\t" << err.code.filename << "(" << err.code.lineNumber << ":" << err.code.colNumber << ")" << std::endl;
+					
+					if (nullptr != err.element) {
+						auto scope = err.element->getScope();						
+						std::cout << "\tscope: '" << scope->getFullName() << "'" << std::endl;
+					}
+				}
+			}
+		}
+
 		void Compiler::build(const std::vector<std::string>& files)
 		{
 			if (files.empty()) {
 				throw Compiler::Error(*this, "no input files");
 			}
+
+			char tmp[256] = { 0 };
+			
+			time_t nowTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+			auto t = *localtime(&nowTime);
+			strftime(tmp, sizeof(tmp)-1, "Build starting at: %I:%M:%S %p (%Y/%m/%d)", &t);
+			Compiler::println(tmp);
+
 			clearEnvironment();
 			
+			
+
 			lexer::Lexer lexer;
 
 			for (auto file : files) {
@@ -180,19 +328,71 @@ namespace language {
 					if (options.verboseMode) {
 						Compiler::println("Starting compiling ast");
 					}
-					compile(parser.ast);
+					compileAST(parser.ast);
 				}
 				
 			}
 			
-			if (options.printAST) {
-				return;
+			if (!options.printAST) {
+				compile();
+
+				createMainEntryPoint();
+
+
+				link();
+
+				if (executableCodePtr) {
+					executableCodePtr.reset();
+				}
 			}
 
-			createMainEntryPoint();
+			buildEnd = std::chrono::system_clock::now();
+
+			printBuildStats();			
+		}
+
+		void Compiler::printBuildStats()
+		{
+			char tmp[256] = { 0 };
+
+			auto buildTime = buildEnd - buildStart;
+			const auto hrs = std::chrono::duration_cast<std::chrono::hours>(buildTime);
+			const auto mins = std::chrono::duration_cast<std::chrono::minutes>(buildTime - hrs);
+			const auto secs = std::chrono::duration_cast<std::chrono::seconds>(buildTime - hrs - mins);
+			const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(buildTime - hrs - mins - secs);
 
 
-			Linker linker;
+			snprintf(tmp, sizeof(tmp) - 1, "build took (H:m:s.ms) %d:%02d:%02d.%03d", hrs.count(), mins.count(), (int)secs.count(), (int)millis.count());
+			Compiler::println(tmp);
+		}
+
+		void Compiler::compileAST(const language::AST& ast)
+		{
+			stage1(ast);			
+		}
+
+		void Compiler::compile()
+		{
+			stage2();
+
+			if (!errorListing.empty()) {
+				throw Compiler::Error(*this, "Compile errors:");
+			}
+
+			if (!executableCodePtr) {
+				programInst = new Program();
+				programInst->setName("a");
+				executableCodePtr.reset(programInst);
+				Module* m = new Module(*this);
+				executableCodePtr->modules.insert(std::make_pair(m->getName(), m));
+			}
+
+			stage3();
+		}
+
+		void Compiler::link()
+		{
+			Linker linker(cmdlineOpts);
 
 			if (executableCodePtr) {
 				for (auto m : executableCodePtr->modules) {
@@ -205,9 +405,9 @@ namespace language {
 					if (!this->options.compileOnly) {
 						linker.objs.push_back(objName);
 					}
-					
+
 				}
-				
+
 				std::string mainOut;
 				outputMainEntryPoint(OUT_INTERMEDIATE, mainOut);
 				outputMainEntryPoint(OUT_OBJECT, mainOut);
@@ -215,7 +415,7 @@ namespace language {
 				if (!this->options.compileOnly) {
 					linker.objs.push_back(mainOut);
 				}
-				
+
 			}
 			else {
 				throw Compiler::Error(*this, "No executable section");
@@ -223,66 +423,17 @@ namespace language {
 
 
 			if (!this->options.compileOnly) {
-				Compiler::println("linking executable " + executableCodePtr->name + " - " + executableCodePtr->version);
-				linker.outputFileName = executableCodePtr->name;
+				Compiler::println("linking executable " + executableCodePtr->getName() + " - " + executableCodePtr->version + "\n");
+				linker.outputFileName = executableCodePtr->getName();
 
 				linker.link(*this);
 			}
 			else {
 				Compiler::println("linking disabled");
 			}
-
-			if (executableCodePtr) {
-				executableCodePtr.reset();
-			}
 		}
 
-		void Compiler::compile(const language::AST& ast)
-		{
-			stage1(ast);
-
-			
-
-			/*
-			std::function<void(const ScopedEnvironment& scope)> func;
-			
-			func = ([&func](const ScopedEnvironment& scope ) -> void{
-				std::string tab = "";// "\t";
-				auto p = scope.parent;
-				while (p) {
-					p = p->parent;
-					tab += "\t";
-				}
-				std::cout << tab << "scope " << scope.children.size() << " children" << std::endl;
-				std::cout << tab << "\ttypes" << std::endl;
-				for (const auto& t : scope.getTypes()) {
-					std::cout << tab << "\t" << t.second.name << " " << t.second.type << std::endl;
-				}
-				std::cout << tab << "\tinstances" << std::endl;
-				for (const auto& i : scope.getInstances()) {
-					std::cout << tab << "\t" << i.second.name << " " << i.second.type.type << std::endl;
-				}
-
-				for (auto s : scope.children) {
-					func(*s);
-				}
-			});
-			
-
-			func(globalEnv);
-			*/
-		}
-
-		void Compiler::dumpCompilerOutput()
-		{
-			//modulePtr->print(llvm::outs(), nullptr);
-		}
-
-
-		void Compiler::dumpCompilerObjectCode()
-		{
-			
-		}
+		
 
 		void Compiler::print(const std::string& msg, bool emitEndln)
 		{
@@ -297,10 +448,15 @@ namespace language {
 			Compiler::print(msg, true);
 		}
 
+		std::string Compiler::mainEntryFunction()
+		{
+			return "runtime_main";
+		}
+
 		void Compiler::createMainEntryPoint()
 		{
 			
-			std::string mainFuncName = "main";
+			std::string mainFuncName = Compiler::mainEntryFunction();
 			auto returnType = llvm::FunctionType::get(llvmBuilderPtr->getInt32Ty(), false);
 			auto mainFunc = mainEntryModulePtr->getFunction(mainFuncName);
 			if (nullptr == mainFunc) {
@@ -320,7 +476,7 @@ namespace language {
 			
 			mainEntryFunc = mainFunc;
 
-			auto mainReturnCode = 1221;
+			auto mainReturnCode = 0;
 			auto retVal = llvmBuilderPtr->getInt32(mainReturnCode);
 			auto i32Res = llvmBuilderPtr->CreateIntCast(retVal, llvmBuilderPtr->getInt32Ty(), true);
 			llvmBuilderPtr->CreateRet(i32Res);
@@ -330,41 +486,214 @@ namespace language {
 
 		void Compiler::stage1(const language::AST& ast)
 		{ 
-		
-			currentScope = &globalEnv;
+			if (nullptr == executableCodePtr) {
+				programInst = new Program();
+				programInst->setName("a");
+				executableCodePtr.reset(programInst);
+				Module* m = new Module(*this);
+				executableCodePtr->modules.insert(std::make_pair(m->getName(), m));
+				m->resetScope();
+
+				currentModule = m;
+			}
 
 			Stage1 s1(*this);
 			ast.visitAll(s1);
-			//ast.reverseVisitAll(s1);
 
-			closeCurrentScope();
+			
+			currentModule->closeCurrentScope();
+
+			if (options.debugMode) {
+				globalEnv.debugPrint();
+			}
+			
+		}
+
+		void Compiler::stage2 ()
+		{
+			//verify var types
+			
+
+
+		
+			std::function<void(ScopedEnvironment& scope)> func;
+
+			func = ([&func,this](ScopedEnvironment& scope) -> void {
+				
+					std::string tab = "";
+					auto p = scope.parent;
+					while (p) {
+						p = p->parent;
+						tab += "\t";
+					}
+					
+					for (auto revIt = scope.children.rbegin(); revIt != scope.children.rend();++revIt) {
+						auto s = *revIt;
+						func(*s);
+					}
+
+					//do stuff
+					for (const auto& v : scope.getVariables()) {
+						const auto& var = v.second;
+						if (var.type.type == language::compiletime::TypeDescriptor::typeUnknown) {
+							Variable resolvedVar;
+							if (!scope.resolveVariable(var, resolvedVar)) {
+								//std::cout << "var '" << var.name << "', type '" << var.type.name << "' undefined" << std::endl;
+								
+								
+								ErrorItem err;
+								if (resolvedVar.type.getName().empty()) {
+									err.message = "No type is specified for this variable ('" + var.getName() + "')";									
+									err.errCode = NO_VARIABLE_TYPE_NAME;
+								}
+								else  {
+									err.message = "No type found for this variable ('" + var.getName() + "') with a type name of '" + var.type.getName() + "'";
+									err.errCode = NO_VARIABLE_TYPE_DEFINED;
+								}
+								err.code = var.location();
+								err.element = &var;
+								this->errorListing.push_back(err);
+							}
+							else {
+
+								std::cout << "able to resolve var '" << resolvedVar.getName() << "', type '" << resolvedVar.type.getName() << "', " << resolvedVar.type.type << std::endl;
+							}
+						}
+					}
+				});
 
 
 
+			if (nullptr != executableCodePtr) {
+				for (auto m : executableCodePtr->modules) {
+					func(*m.second->globalScope());					
+				}				
+			}
+			else {
 
-			if (!executableCodePtr) {
-				programInst = new Program();
-				programInst->name = "a";
-				executableCodePtr.reset(programInst);
-				Module* m = new Module(*this);
-				executableCodePtr->modules.insert(std::make_pair(m->name, m));
 			}
 
+			
+			
+		}
+
+		
+
+		void Compiler::buildFunction(const Instance* receiver, const CppString& selector, const std::vector<const Instance*>& params , const ScopedEnvironment& scope)
+		{
+			auto fullyQualifiedSelector = selector;
+			bool first = true;
+			for (const auto& p : params) {
+				if (!first) {
+					fullyQualifiedSelector += "_";
+					first = false;
+				}
+				fullyQualifiedSelector += p->getName();
+			}
+
+		//	scope.module->llvmModulePtr
+
+			//llvm::Function* msgFunction = this->llvmCtxPtr
+		}
+
+
+		void Compiler::buildFunction(const Instance* receiver, const Message& msg, const ScopedEnvironment& scope)
+		{
+			auto selector = msg.getName();
+
+			std::vector<const Instance*> params;
+
+			for (const auto& p:msg.parameters) {
+				params.push_back(p.second.param);
+			}
+
+			buildFunction(receiver, selector, params, scope);
+		}
+
+		void Compiler::buildFunctions( const ScopedEnvironment& scope)
+		{
+			for (const auto& m : scope.getMsgSends()) {
+				const SendMessage& sendMsg = m.second;
+
+				//1) reciever
+				//2) message selector (name of the message)
+				//3) 0 or more parameters
+
+				const Instance* receiver = nullptr;
+
+				receiver = sendMsg.instance;
+
+				buildFunction(receiver, sendMsg.msg, scope);
+			}
+		}
+
+		void Compiler::stage3()
+		{
+			
+
+			std::function<void(ScopedEnvironment& scope)> func;
+			func = ([&func, this](ScopedEnvironment& scope) -> void {
+				for (auto revIt = scope.children.rbegin(); revIt != scope.children.rend(); ++revIt) {
+					auto s = *revIt;
+					func(*s);
+				}
+
+				llvm::Value* val = nullptr;
+				for (const auto& i : scope.getInstances()) {
+					const Instance& inst = i.second;
+					
+				}
+				for (const auto& v : scope.getVariables()) {
+					const Variable& var = v.second;
+					auto varName = var.getName();
+					switch (var.type.type) {
+						case language::compiletime::TypeDescriptor::typeInteger8 : {
+							
+							//val = llvmBuilderPtr->getInt8(0);
+						}break;
+
+						default: {
+
+						}break;
+					}
+				}
+
+				this->buildFunctions(scope);
+
+			});
+
+			if (nullptr != executableCodePtr) {
+				for (auto m : executableCodePtr->modules) {
+					m.second->resetScope();
+					func(*m.second->globalScope());
+				}
+			}
+			else {
+
+			}
 		}
 
 		void Compiler::stage1NewModule(const parser::ModuleBlock& node)
 		{
-			if (!executableCodePtr) {
-				programInst = new Program();
-				programInst->name = "a";
-				executableCodePtr.reset(programInst);
+			
+
+			auto moduleName = node.name;
+
+			if (executableCodePtr->modules.count(moduleName) != 0) {
+				auto found = executableCodePtr->modules.find(moduleName);
+				currentModule = found->second;
 			}
+			else {
+				Module* m = new Module(*this);
+				m->setLocation(node.token.location);
+				m->setName(moduleName);
+				m->version = node.version;
+				executableCodePtr->modules.insert(std::make_pair(m->getName(), m));
 
-
-			Module* m = new Module(*this);
-			m->name = node.name;
-			m->version = node.version;
-			executableCodePtr->modules.insert(std::make_pair(m->name, m));
+				currentModule = m;
+			}
+			
+			currentModule->resetScope();
 
 			if (options.debugMode) {
 				std::cout << "ModuleBlock " << node.name << std::endl;
@@ -373,105 +702,93 @@ namespace language {
 
 		void Compiler::stage1NewClass(const parser::ClassBlock& node)
 		{
-			pushNewScope();
-
 			Type newType;
-			newType.name = node.name;
-			newType.type = Type::typeClass;
+			newType.setName(node.name);
+			newType.type = language::compiletime::TypeDescriptor::typeClass;
+			newType.setLocation(node.token.location);
+			currentModule->getCurrentScope()->addType(newType);
 
+			currentModule->pushNewScope();
 
-			currentScope->addType(newType);
+			currentModule->getCurrentScope()->name = node.name;
 		}
 
 		void Compiler::stage1CloseClassBlock(const parser::ClassBlock& node)
 		{
-			closeCurrentScope();
+			currentModule->closeCurrentScope();
 		}
 
-		void Compiler::closeScope(const ScopedEnvironment& scope)
-		{
-			if (options.debugMode) {
-				scope.debugPrint();
-			}
-		}
 
-		void Compiler::closeCurrentScope() 
-		{
-			auto scopePtr = popCurrentScope();
-			if (nullptr != scopePtr) {
-				closeScope(*scopePtr);
-			}
-		}
-
-		ScopedEnvironment* Compiler::popCurrentScope()
-		{
-			ScopedEnvironment* result = currentScope;
-			auto parent = currentScope->parent;
-			currentScope = parent;
-			if (nullptr == currentScope) {
-				currentScope = &globalEnv;
-			}
-			return result;
-		}
-
-		ScopedEnvironment* Compiler::createNewScope()
-		{
-			ScopedEnvironment* result = new ScopedEnvironment(*this);
-			currentScope->add(result);
-			return result;
-		}
-
-		ScopedEnvironment* Compiler::pushNewScope()
-		{
-			ScopedEnvironment* newScope = createNewScope();
-			currentScope = newScope;
-			return currentScope;
-		}
 
 		void Compiler::stage1NewMessageBlock(const parser::MessageBlock& node)
 		{
-			pushNewScope();
+			currentModule->pushNewScope();
+			currentModule->getCurrentScope()->name = node.msgDecl->msgIsClosure ? "_closure_" : node.msgDecl->name;
 		}
 
 		void Compiler::stage1CloseMessageBlock(const parser::MessageBlock& node)
+		{			
+			currentModule->closeCurrentScope();
+		}
+
+		std::string Compiler::generateTempInstanceName(const language::ParseNode* node)
 		{
-			if (options.debugMode) {
-				std::cout << "closing message " << node.name << std::endl;
-			}
-			
-			closeCurrentScope();
+			std::string result;
+
+			char tmp[256] = { 0 };
+			snprintf(tmp, sizeof(tmp) - 1, "%p", node);
+			result = node->getFullPath() + "_tmp_" + tmp;
+
+			return result;
 		}
 
 		void Compiler::stage1NewSendMessage(const parser::SendMessage& node)
 		{
 			//std::cout << "stage1NewSendMessage " << node.message->name << std::endl;
 			SendMessage newSendMsg;
-			newSendMsg.msg.name = node.message->name;
+			newSendMsg.msg.setName(node.message->name);
+			newSendMsg.setLocation(node.token.location);
+
 			std::string instName = node.instance->name;
-			if (instName.empty()) {
-				char tmp[256] = { 0 };
-				snprintf(tmp, sizeof(tmp) - 1, "%p", node.instance);
-				instName = node.instance->getFullPath()+"_tmp_" + tmp;
+			if (instName.empty()) {				
+				instName = generateTempInstanceName(node.instance);
 			}
-			if (currentScope->hasInstance(instName)) {
-				newSendMsg.instance = &currentScope->getInstance(node.instance->name);
+			if ( currentModule->getCurrentScope()->hasInstance(instName)) {
+				newSendMsg.instance = &currentModule->getCurrentScope()->getInstance(node.instance->name);
 			}
 			else {
 				Instance newInst;
-				newInst.name = instName;
-				
-
-				currentScope->addInstance(newInst);
-				newSendMsg.instance = &currentScope->getInstance(instName);
-				
+				newInst.setName(instName);
+				newInst.setLocation(node.token.location);
+				currentModule->getCurrentScope()->addInstance(newInst);
+				newSendMsg.instance = &currentModule->getCurrentScope()->getInstance(instName);
 			}
 			
 			for (auto p : node.message->parameters) {
 
 			}
-			currentScope->addSendMessage(newSendMsg);
+			currentModule->getCurrentScope()->addSendMessage(newSendMsg);
 		}
 		
+		void Compiler::stage1NewAssignmentMessage(const parser::Assignment& node)
+		{
+			SendMessage newSendMsg;
+			newSendMsg.msg.setName(node.message->name);
+			newSendMsg.setLocation(node.token.location);
+			std::string instName = node.instance->name;
+			if (instName.empty()) {
+				instName = generateTempInstanceName(node.instance);
+			}
+			if (currentModule->getCurrentScope()->hasInstance(instName)) {
+				newSendMsg.instance = &currentModule->getCurrentScope()->getInstance(node.instance->name);
+			}
+
+			if (node.message->parameters.size() != 1) {
+				throw Compiler::Error(*this,"assignment message found, but has more than 1 parameter");
+			}
+
+			currentModule->getCurrentScope()->addSendMessage(newSendMsg);
+		}
 
 		void Compiler::stage1NewMessageDecl(const parser::MessageDeclaration& node)
 		{
@@ -491,15 +808,36 @@ namespace language {
 					std::cout << "\tno return type" << std::endl;
 				}
 			}
+
+
+
+			for (const auto& p : node.params) {
+				Variable newVar;
+				newVar.setName(p->name);
+				newVar.setLocation(p->token.location);
+				if (!p->type.empty()) {
+					newVar.type = currentModule->getCurrentScope()->getType(p->type, true);
+				}
+				if (language::compiletime::TypeDescriptor::typeUnknown == newVar.type.type) {
+					newVar.type.setName(p->type);
+				}
+				currentModule->getCurrentScope()->addVariable(newVar);
+			}
 		}
 
 		void Compiler::stage1NewRecord(const parser::RecordBlock& node)
 		{
 			Type newType;
-			newType.name = node.name;
-			newType.type = Type::typeClass;
+			newType.setName(node.name);
+			newType.type = language::compiletime::TypeDescriptor::typeClass;
+			newType.setLocation(node.token.location);
 
-			currentScope->addType(newType);
+			currentModule->getCurrentScope()->addType(newType);
+		}
+
+		void Compiler::stage1CloseRecord(const parser::RecordBlock & node)
+		{
+
 		}
 
 		void Compiler::stage1Variable(const parser::VariableNode& node)
@@ -510,11 +848,85 @@ namespace language {
 			
 
 			Variable newVar;
-			newVar.name = node.name;
+			newVar.setName( node.name);
+			newVar.setLocation(node.token.location);
 			if (!node.type.empty()) {
-				newVar.type = currentScope->getType(node.type, true);
+
+				if (!currentModule->getCurrentScope()->hasType(node.type, true)) {
+					printf("ERROR! No type (%s) found!\n", node.type.c_str());
+				}
+
+				newVar.type = currentModule->getCurrentScope()->getType(node.type, true);
 			}
-			currentScope->addVariable(newVar);
+			if (language::compiletime::TypeDescriptor::typeUnknown == newVar.type.type) {
+				newVar.type.setName(node.type);
+			}
+			currentModule->getCurrentScope()->addVariable(newVar);
+		}
+
+		void Compiler::stage1Literal(const parser::LiteralNode& node)
+		{
+			if (options.debugMode) {
+				std::cout << "literal: " << node.getFullPath() << ": '" << node.val << "', " << node.type << std::endl;
+			}
+
+			switch (node.type) {
+				case parser::LiteralNode::STRING_LITERAL: {
+					language::runtime::datatypes::string s;
+					s.assign(node.val);
+					std::string name = generateTempInstanceName(&node);
+					currentModule->getCurrentScope()->addStringLiteral(name, s);
+					
+					Instance newInst;
+					newInst.setName(name);
+					newInst.type = currentModule->getCurrentScope()->getType("string", true);
+					newInst.setLocation(node.token.location);
+					
+					newInst.value.stringPtr = &currentModule->getCurrentScope()->getStringLiteral(name);
+					currentModule->getCurrentScope()->addInstance(newInst);
+
+				}break;
+
+				case parser::LiteralNode::INTEGER_LITERAL: {
+					Primitive p;
+					p.type = globalEnv.getType("int32");
+					p.data.int32V = std::stoi(node.val);
+
+
+					std::string name = generateTempInstanceName(&node);
+					currentModule->getCurrentScope()->addPrimLiteral(name, p);
+
+					Instance newInst;
+					newInst.setName( name);
+					newInst.type = p.type;
+					newInst.setLocation(node.token.location);
+					
+					newInst.value.primitivePtr = &currentModule->getCurrentScope()->getPrimLiteral(name);
+					currentModule->getCurrentScope()->addInstance(newInst);
+
+				}break;
+			}		
+		}
+
+		void Compiler::stage1Nil(const parser::NilNode& node)
+		{
+			if (options.debugMode) {
+				std::cout << "nil: " << node.getFullPath() << std::endl;
+			}
+		}
+
+		void Compiler::stage1Instance(const parser::MsgInstanceNode& node)
+		{
+			if (options.debugMode) {
+				std::cout << "msg instance: " << node.getFullPath() << " : msg closure" << std::endl;
+			}
+
+
+			Instance newInst;
+			newInst.setName(node.name);
+			newInst.setLocation(node.token.location);
+			newInst.type = globalEnv.getType("message", false);
+			currentModule->getCurrentScope()->addInstance(newInst);
 		}
 
 		void Compiler::stage1Instance(const parser::InstanceNode& node)
@@ -523,23 +935,47 @@ namespace language {
 				std::cout << "instance: " << node.getFullPath() << ":" << node.name << std::endl;
 			}
 			Instance newInst;
-			newInst.name = node.name;
+			newInst.setName(node.name);
+			newInst.setLocation(node.token.location);
+			bool newVarNeeded = true;
 			if (!node.type.empty()) {
-				newInst.type = currentScope->getType(node.type, true);
-			}			
+				newInst.type = currentModule->getCurrentScope()->getType(node.type, true);
+			}
+			else {
+				auto v = currentModule->getCurrentScope()->getVariable(node.name,true);
+				if (!v.empty()) {
+					newInst.type = v.type;
+					newVarNeeded = false;
+				}
+			}
+			if (language::compiletime::TypeDescriptor::typeUnknown == newInst.type.type) {
+				newInst.type.setName(node.type);
+			}
 			
-			currentScope->addInstance(newInst);
+			currentModule->getCurrentScope()->addInstance(newInst);
+
+			if (!currentModule->getCurrentScope()->hasVariable(newInst.getName()) && newVarNeeded) {
+				Variable newVar;
+				newVar.setName(newInst.getName());
+				newVar.type = newInst.type;
+				newVar.setLocation(node.token.location);
+
+				currentModule->getCurrentScope()->addVariable(newVar);
+			}			
 		}
 
 
 		void Compiler::clearEnvironment()
 		{
+			buildStart = buildEnd = std::chrono::system_clock::now();
+
 			globalEnv.clear();
 			classes.clear();
+			errorListing.clear();
+
 			programInst = nullptr;
 			libInst = nullptr;
 			executableCodePtr.reset();
-			currentScope = &globalEnv;
 		}
 
 		void Compiler::init()
@@ -587,36 +1023,21 @@ namespace language {
 			mainEntryModulePtr = std::make_unique<llvm::Module>("mainEntryModule",  * llvmCtxPtr);
 			mainEntryModulePtr->setTargetTriple(llvmTargetTriple.str());
 
+
+			language::compiletime::Compiletime::init();
+
 			initBasicTypes();
 		}
 
 	
 		void Compiler::initBasicTypes()
 		{
-			static std::map<Type::TypeOf, std::string> globalPrims = {
-				{Type::typeInteger8, "int8"},
-				{Type::typeUInteger8, "uint8"},
-				{Type::typeInteger16, "int16"},
-				{Type::typeUInteger16, "uint16"},
-				{Type::typeInteger32, "int32"},
-				{Type::typeUInteger32, "uint32"},
-				{Type::typeInteger64, "int64"},
-				{Type::typeUInteger64, "uint64"},
-				{Type::typeInteger128, "int128"},
-				{Type::typeUInteger128, "uint128"},
-				{Type::typeDouble32, "real32"},
-				{Type::typeDouble64, "real64"},
-				{Type::typeDouble64, "bool"},
-				{Type::typeDouble64, "string"},
-				{Type::typeDouble64, "array"},
-				{Type::typeDouble64, "dictionary"}
-			};
+			static std::map<language::compiletime::TypeDescriptor, std::string> globalPrims = language::compiletime::Compiletime::globalPrims();
 
 			for (auto t : globalPrims) {
 				
 				globalEnv.addType(Type(t.second, t.first));
 			}
-			
 		}
 
 		llvm::Module* Compiler::createModule(const std::string& name)
@@ -675,21 +1096,33 @@ namespace language {
 			outfileName = "";
 			switch (outFmt) {
 				case OUT_INTERMEDIATE: {
-					outfileName = executableCodePtr->name + "_main_entry.ll";
+					outfileName = executableCodePtr->getName() + "_main_entry.ll";
 				}
 				break;
 
 				case OUT_OBJECT: {
-					outfileName = executableCodePtr->name + "_main_entry.o";
+					outfileName = executableCodePtr->getName() + "_main_entry.o";
 				}
 				break;
 			}
 			outputModule(outFmt,*mainEntryModulePtr, outfileName);
 		}
 
+		Module::~Module()
+		{
+			
+		}
+
 		void Module::init(Compiler& c)
 		{
-			modulePtr.reset( c.createModule(name) );
+			name = "a";
+
+			llvmModulePtr.reset( c.createModule(name) );
+
+			globalEnv = new ScopedEnvironment(c);
+			globalEnv->name = "module scope " + name;
+			
+			c.getGlobalScope()->add(globalEnv);
 		}
 
 		void Module::output(Compiler& c, OutputFormat outFmt, std::string& outputFileName)
@@ -713,7 +1146,52 @@ namespace language {
 				break;
 			}
 			
-			c.outputModule(outFmt, *modulePtr, outputFileName);
+			c.outputModule(outFmt, *llvmModulePtr, outputFileName);
+		}
+
+		void Module::resetScope()
+		{
+			if (nullptr == globalEnv) {
+				globalEnv = new ScopedEnvironment(compiler);
+				compiler.getGlobalScope()->add(globalEnv);
+			}
+			currentScope = globalEnv;
+		}
+
+		void Module::closeScope(const ScopedEnvironment& scope)
+		{
+			if (compiler.options.debugMode) {
+				scope.debugPrint();
+			}
+		}
+
+		void Module::closeCurrentScope() {
+			auto scopePtr = popCurrentScope();
+			if (nullptr != scopePtr) {
+				closeScope(*scopePtr);
+			}
+		}
+
+		ScopedEnvironment* Module::popCurrentScope() {
+			ScopedEnvironment* result = currentScope;
+			auto parent = currentScope->parent;
+			currentScope = parent;
+			if (nullptr == currentScope) {
+				currentScope = globalEnv;
+			}
+			return result;
+		}
+
+		ScopedEnvironment* Module::createNewScope() {
+			ScopedEnvironment* result = new ScopedEnvironment(compiler);
+			currentScope->add(result);
+			return result;
+		}
+
+		ScopedEnvironment* Module::pushNewScope() {
+			ScopedEnvironment* newScope = createNewScope();
+			currentScope = newScope;
+			return currentScope;
 		}
 
 
@@ -723,33 +1201,107 @@ namespace language {
 			if (hasType(name)) {
 				throw Compiler::Error(compiler, "Type already exists");
 			}
-			types.insert(std::make_pair(name, t));
+			auto res = types.insert(std::make_pair(name, t));
+			res.first->second.setScope(this);
+
+		}
+
+		CppString ScopedEnvironment::getFullName() const
+		{
+			CppString result;
+			
+			auto p = parent;
+			while (p) {
+				if (nullptr != p) {
+					if (!result.empty()) {
+						result = "." + result;
+					}
+
+					std::string pname = (p->name.empty() && p->parent == nullptr) ? "global" : p->name;
+					result = pname + result;
+				}
+				p = p->parent;
+			}
+
+			if (!result.empty()) {
+				result += ".";
+			}
+			result += name;
+
+			if (result.empty() && nullptr == parent) {
+				result = "global";
+			}
+
+			return result;
+		}
+
+		void ScopedEnvironment::debugPrint() const
+		{
+			std::string tab = "";// "\t";
+			auto p = parent;
+			while (p) {
+				p = p->parent;
+				tab += "\t";
+			}
+
+			std::string line;
+			line.append(80, '-');
+
+			std::cout << tab << "scope: '" << getFullName() << "'" << std::endl;
+			std::cout << tab << "\ttypes" << std::endl;
+
+			for (const auto& t : getTypes()) {
+				if (t.second.isPrimitive()) {
+					std::cout << tab << "\t" << t.second.getName() << " " << t.second.type << std::endl;
+				}
+				else {
+					std::cout << tab << "\t * " << t.second.getName() << " " << t.second.type << std::endl;
+				}
+
+			}
+			std::cout << line << std::endl;
+			std::cout << tab << "\tinstances" << std::endl;
+			for (const auto& i : getInstances()) {
+				std::cout << tab << "\t" << i.second.getName() << " " << i.second.type.type << std::endl;
+			}
+			std::cout << line << std::endl;
+			std::cout << tab << "\tvariables" << std::endl;
+			for (const auto& v : getVariables()) {
+				std::cout << tab << "\t" << v.second.getName() << " '" << v.second.type.fullyQualifiedName() << "' : " << v.second.type.type << std::endl;
+			}
+			std::cout << line << std::endl;
+			std::cout << tab << "\tsend messages" << std::endl;
+			for (const auto& msg : getMsgSends()) {
+				std::cout << tab << "\t" << msg.first /* << " " << v.second.type.fullyQualifiedName() << ":" << v.second.type.type*/ << std::endl;
+			}
 		}
 
 		void ScopedEnvironment::addInstance(const Instance& i)
 		{
-			if (hasInstance(i.name)) {
+			if (hasInstance(i.getName())) {
 				//throw Compiler::Error(compiler, "Instance already exists");
 				return;
 			}
 			
-			auto res = instances.insert(std::make_pair(i.name, i));
-			res.first->second.scope = this;
+			auto res = instances.insert(std::make_pair(i.getName(), i));
+			res.first->second.setScope(this);
 		}
 
 		void ScopedEnvironment::addVariable(const Variable& v)
 		{
-			if (hasVariable(v.name)) {
+			if (hasVariable(v.getName())) {
 				throw Compiler::Error(compiler, "Variable already exists");
 			}
 
-			auto res = variables.insert(std::make_pair(v.name, v));
-			res.first->second.scope = this;
+			printf("'%s' : '%s'\n", v.getName().c_str(), v.type.getName().c_str());
+
+			auto res = variables.insert(std::make_pair(v.getName(), v));
+			res.first->second.setScope(this);
 		}
 
 		void ScopedEnvironment::addSendMessage(const SendMessage& msg)
 		{
-			std::string key = msg.msg.name + "_to_" + (msg.instance!=nullptr ? msg.instance->name : std::string("null"));
+			std::string key = msg.msg.getName() + "_to_" + (msg.instance != nullptr ? msg.instance->getName() : std::string("null"));
 			if (!msg.msg.parameters.empty()) {
 				key += "_with_";
 				for (auto p : msg.msg.parameters) {
@@ -757,7 +1309,64 @@ namespace language {
 				}
 			}
 			auto res = msgSends.insert(std::make_pair(key, msg));
-			res.first->second.scope = this;
+			res.first->second.setScope(this);
+		}
+
+		void ScopedEnvironment::addStringLiteral(const CppString& name, const language::runtime::datatypes::string& strlit)
+		{
+			if (strings.count(name) != 0) {
+				return;
+			}
+			auto res = strings.insert(std::make_pair(name, strlit));
+		}
+
+		void ScopedEnvironment::addPrimLiteral(const CppString& name, const Primitive& prim)
+		{
+			if (primitives.count(name) != 0) {
+				return;
+			}
+			auto res = primitives.insert(std::make_pair(name, prim));
+		}
+
+		bool ScopedEnvironment::resolveVariable(const Variable& var, Variable& outVar)
+		{
+			Variable* foundVar = nullptr;
+			if (var.type.type != language::compiletime::TypeDescriptor::typeUnknown) {
+				return true;
+			}
+
+			auto res = hasType(var.type.getName(), true);
+			printf("%s (%s) has type %d\n", var.getName().c_str(), var.type.getName().c_str(), (int)res);
+			if (res) {
+				auto t = getType(var.type.getName(), true);
+				auto p = this;
+				while (nullptr != p) {
+					auto found = p->variables.find(var.getName());
+					if (found != p->variables.end()) {
+						foundVar = &found->second;
+						break;
+					}
+					p = p->parent;
+				}
+
+				if (nullptr != foundVar) {
+					foundVar->type = t;
+					outVar = *foundVar;
+				}
+			}
+			return foundVar == nullptr ? false : true;
+		}
+
+		void LinkerOptions::init(const utils::cmd_line_options& cmdline)
+		{
+			auto o = cmdline["verbose-mode"];
+			if (!o.is_null()) { verboseMode = o; }
+
+			o = cmdline["debug-mode"];
+			if (!o.is_null()) { debugMode = o; }
+
+			o = cmdline["nologo"];
+			if (!o.is_null()) { noLogo = o; }
 		}
 
 		void Linker::init()
@@ -770,13 +1379,41 @@ namespace language {
 
 		}
 
+		void Linker::reportSuccessfulOutput()
+		{
+			auto sz = std::filesystem::file_size(outputFileName);
+
+			int sizeIdx = 0;
+			double mantissa = sz;
+			const char* tmpSzTypes = "BKMGTPE";
+
+			while (mantissa >= 1024.) {
+				mantissa /= 1024.;
+				++sizeIdx;
+			}
+			auto hrval = std::ceil(mantissa * 10.) / 10.;
+			char tmp[256];
+			snprintf(tmp, sizeof(tmp) - 1, "%0.1f%c", hrval, tmpSzTypes[sizeIdx]);
+			std::string s = tmp;
+			s += ((sizeIdx == 0) ? "" : "B, ");
+			snprintf(tmp, sizeof(tmp) - 1, "%zu bytes", sz);
+			s += ((sizeIdx == 0) ? "" : tmp);
+			Compiler::println("executable: " + outputFileName + " (size: " + s + ")");
+		}
+
 		void Linker::link(const Compiler& compiler)
 		{
 			//run llvm linker
-			std::string link_command = "lld-link /entry:main ";
+			std::string link_command = "/verbose /subsystem:console /entry:" + Compiler::mainEntryFunction() + " ";
+			
+
 
 			if (outputFileName.find(".exe")==std::string::npos) {
 				outputFileName += ".exe";
+			}
+
+			if (std::filesystem::exists(outputFileName)) {
+				std::filesystem::remove(outputFileName);
 			}
 
 			link_command += "/out:" + outputFileName + " ";
@@ -784,13 +1421,22 @@ namespace language {
 				link_command += obj + " ";
 			}
 			
-			//link_command += " > tmp.out 2>&1";
-			//std::cout.flush();
-			std::system(link_command.c_str());
-			//std::cout << std::ifstream("tmp.out").rdbuf();
-			//std::cout.flush();
+			{
+				utils::process process(
+					[](const std::string& output) -> void {
+						Compiler::println(output);
+					}
+				);
 
-			Compiler::println("executable: " + outputFileName);
+				process.createProcess("lld-link", link_command);
+			}
+			
+			if (!std::filesystem::exists(outputFileName)) {
+				Compiler::println("failed to create executable '" + outputFileName + "'");
+			}
+			else {
+				reportSuccessfulOutput();
+			}
 		}
 	}
 	

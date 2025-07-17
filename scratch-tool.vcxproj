@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -120,7 +120,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>LLVMAnalysis.lib;LLVMCore.lib;LLVMExecutionEngine.lib;LLVMInstCombine.lib;LLVMObject.lib;LLVMOrcJIT.lib;LLVMPasses.lib;LLVMRuntimeDyld.lib;LLVMScalarOpts.lib;LLVMSupport.lib;LLVMX86CodeGen.lib;LLVMX86AsmParser.lib;LLVMX86Desc.lib;LLVMX86Disassembler.lib;LLVMX86Info.lib;LLVMCoroutines.lib;LLVMHipStdPar.lib;LLVMipo.lib;LLVMFrontendOpenMP.lib;LLVMFrontendOffloading.lib;LLVMLinker.lib;LLVMVectorize.lib;LLVMJITLink.lib;LLVMOrcTargetProcess.lib;LLVMOrcShared.lib;LLVMWindowsDriver.lib;LLVMOption.lib;LLVMCFGuard.lib;LLVMIRPrinter.lib;LLVMInstrumentation.lib;LLVMAsmPrinter.lib;LLVMGlobalISel.lib;LLVMSelectionDAG.lib;LLVMCodeGen.lib;LLVMAggressiveInstCombine.lib;LLVMTarget.lib;LLVMBitWriter.lib;LLVMObjCARCOpts.lib;LLVMTransformUtils.lib;LLVMProfileData.lib;LLVMSymbolize.lib;LLVMDebugInfoPDB.lib;C:\Program Files\Microsoft Visual Studio\2022\Community\DIA SDK\lib\amd64\diaguids.lib;LLVMDebugInfoMSF.lib;LLVMDebugInfoBTF.lib;LLVMDebugInfoDWARF.lib;LLVMIRReader.lib;LLVMBitReader.lib;LLVMAsmParser.lib;LLVMTextAPI.lib;LLVMRemarks.lib;LLVMBitstreamReader.lib;LLVMCodeGenTypes.lib;LLVMMCParser.lib;LLVMMCDisassembler.lib;LLVMMC.lib;LLVMBinaryFormat.lib;LLVMTargetParser.lib;LLVMDebugInfoCodeView.lib;LLVMDemangle.lib;psapi.lib;shell32.lib;ole32.lib;uuid.lib;advapi32.lib;ws2_32.lib;ntdll.lib;delayimp.lib;-delayload:shell32.dll;-delayload:ole32.dll;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;oleaut32.lib;comdlg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>LLVMAnalysis.lib;LLVMCore.lib;LLVMExecutionEngine.lib;LLVMInstCombine.lib;LLVMObject.lib;LLVMOrcJIT.lib;LLVMPasses.lib;LLVMRuntimeDyld.lib;LLVMScalarOpts.lib;LLVMSupport.lib;LLVMX86CodeGen.lib;LLVMX86AsmParser.lib;LLVMX86Desc.lib;LLVMX86Disassembler.lib;LLVMX86Info.lib;LLVMCoroutines.lib;LLVMHipStdPar.lib;LLVMipo.lib;LLVMFrontendOpenMP.lib;LLVMFrontendOffloading.lib;LLVMLinker.lib;LLVMVectorize.lib;LLVMJITLink.lib;LLVMOrcTargetProcess.lib;LLVMOrcShared.lib;LLVMWindowsDriver.lib;LLVMOption.lib;LLVMCFGuard.lib;LLVMIRPrinter.lib;LLVMInstrumentation.lib;LLVMAsmPrinter.lib;LLVMGlobalISel.lib;LLVMSelectionDAG.lib;LLVMCodeGen.lib;LLVMAggressiveInstCombine.lib;LLVMTarget.lib;LLVMBitWriter.lib;LLVMObjCARCOpts.lib;LLVMTransformUtils.lib;LLVMProfileData.lib;LLVMSymbolize.lib;LLVMDebugInfoPDB.lib;C:\Program Files\Microsoft Visual Studio\2022\Community\DIA SDK\lib\amd64\diaguids.lib;LLVMDebugInfoMSF.lib;LLVMDebugInfoBTF.lib;LLVMDebugInfoDWARF.lib;LLVMIRReader.lib;LLVMBitReader.lib;LLVMAsmParser.lib;LLVMTextAPI.lib;LLVMRemarks.lib;LLVMBitstreamReader.lib;LLVMCodeGenTypes.lib;LLVMMCParser.lib;LLVMMCDisassembler.lib;LLVMMC.lib;LLVMBinaryFormat.lib;LLVMTargetParser.lib;LLVMDebugInfoCodeView.lib;LLVMDemangle.lib;scratch-lang-lib_$(Platform)_$(Configuration).lib;psapi.lib;shell32.lib;ole32.lib;uuid.lib;advapi32.lib;ws2_32.lib;ntdll.lib;delayimp.lib;-delayload:shell32.dll;-delayload:ole32.dll;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;oleaut32.lib;comdlg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -143,24 +144,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="src\cmd_line_options.h" />
-    <ClInclude Include="src\Compiler.h" />
-    <ClInclude Include="src\Lexer.h" />
-    <ClInclude Include="src\Parser.h" />
-    <ClInclude Include="src\Runtime.h" />
-    <ClInclude Include="src\string_ref.h" />
-    <ClInclude Include="src\Token.h" />
     <ClInclude Include="src\version.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\compiler.cpp" />
-    <ClCompile Include="src\Parser.cpp" />
-    <ClCompile Include="src\runtime.cpp" />
-    <ClCompile Include="src\scratch-tool.cpp" />
-    <ClCompile Include="src\Token.cpp" />
+    <ClCompile Include="src\scratch-tool-main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="grammar_ideas.txt" />
+    <Text Include="syntax_ideas.txt" />
   </ItemGroup>
   <ItemGroup>
     <None Include="tests\test1.scratch" />
@@ -168,6 +159,15 @@
     <None Include="tests\test3.scratch" />
     <None Include="tests\test4.scratch" />
     <None Include="tests\test5.scratch" />
+    <None Include="tests\test5b.scratch" />
+    <None Include="tests\test_literal_vars.scratch" />
+    <None Include="tests\test_main.scratch" />
+    <None Include="tests\test_msg1.scratch" />
+    <None Include="tests\test_msg2.scratch" />
+    <None Include="tests\test_msg_no_recvr.scratch" />
+    <None Include="tests\test_static_msg.scratch" />
+    <None Include="tests\test_str_lit.scratch" />
+    <None Include="tests\test_vars1.scratch" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

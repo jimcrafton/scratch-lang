@@ -1,36 +1,24 @@
 
+#include "scratch_tool.h"
 
-#include "Lexer.h"
-#include "Parser.h"
 
-#include "compiler.h"
-#include "cmd_line_options.h"
-
-utils::cmd_line_options::option opts[] = {
-	utils::cmd_line_options::action_option("","help", "how to use..."),
-	utils::cmd_line_options::action_option("","version", "display version information"),
-	utils::cmd_line_options::action_option("","print-ast", "prints out ast for translation units only"),
-	utils::cmd_line_options::bool_option("","no-logo", false, "hide logo for unit compilation"),
-	utils::cmd_line_options::bool_option("","verbose-mode", false, "enable/disable verbose mode for extra reporting"),
-	utils::cmd_line_options::bool_option("","debug-mode", false, "enable/disable debug mode for even more reporting"),
-	utils::cmd_line_options::bool_option("","compile-only",false, "only compiles input files, no linking attempted"),
-	utils::cmd_line_options::option::null()
+utils::cmd_line_options::option_array_t scratch_tool::opts = {
+	utils::cmd_line_options::action_option("",language::compiler::CompilerOptions::COMP_OPT_HELP, "how to use..."),
+	utils::cmd_line_options::action_option("",language::compiler::CompilerOptions::COMP_OPT_VERSION, "display version information"),
+	utils::cmd_line_options::action_option("",language::compiler::CompilerOptions::COMP_OPT_PRINT_AST, "prints out ast for translation units only"),
+	
+	utils::cmd_line_options::bool_option("",language::compiler::CompilerOptions::COMP_OPT_NO_LOGO, false, "hide logo for unit compilation"),
+	utils::cmd_line_options::bool_option("",language::compiler::CompilerOptions::COMP_OPT_VERBOSE_MODE, false, "enable/disable verbose mode for extra reporting"),
+	utils::cmd_line_options::bool_option("",language::compiler::CompilerOptions::COMP_OPT_DEBUG_MODE, false, "enable/disable debug mode for even more reporting"),
+	utils::cmd_line_options::bool_option("",language::compiler::CompilerOptions::COMP_OPT_COMPILE_ONLY,false, "only compiles input files, no linking attempted")
 };
 
 
-int main(int argc, char** argv)
+int scratch_main(utils::cmd_line_options& cmdline)
 {
 	int returnCode = 0;
 
-	utils::cmd_line_options cmdline("scratch-tool", opts, sizeof(opts) / sizeof(opts[0]));
-	if (!cmdline.parse(argc, argv)) {
-		cmdline.usage();
-		return - 1;
-	}
-
 	auto files = cmdline.trailing_values();
-
-	
 
 	if (cmdline["help"]) {
 		cmdline.usage();
@@ -38,14 +26,12 @@ int main(int argc, char** argv)
 	}
 
 	if (cmdline["version"]) {
-		std::cout << cmdline.get_app_name() << " version " <<  language::compiler::Compiler::version() << std::endl;
+		std::cout << cmdline.get_app_name() << " version " << language::compiler::Compiler::version() << std::endl;
 		return 0;
 	}
 
+	language::compiler::Compiler compiler(cmdline);
 	try {
-
-		language::compiler::Compiler compiler(cmdline);		
-
 		compiler.build(files.vals());
 	}
 	catch (const lexer::Lexer::Error& e) {
@@ -65,6 +51,32 @@ int main(int argc, char** argv)
 		returnCode = -1;
 	}
 
-
 	return returnCode;
+}
+
+int scratch_tool::main(const scratch_tool::ArgMapT& args, const std::vector<std::string>& files)
+{
+	utils::cmd_line_options cmdline("scratch-tool", opts);
+
+	if (!cmdline.parse(args, files)) {
+		cmdline.usage();
+		return -1;
+	}
+
+	
+	return scratch_main(cmdline);
+}
+ 
+int scratch_tool::main(int argc, char** argv)
+{
+	
+
+	utils::cmd_line_options cmdline("scratch-tool", opts);
+	if (!cmdline.parse(argc, argv)) {
+		cmdline.usage();
+		return -1;
+	}
+
+
+	return scratch_main(cmdline);
 }

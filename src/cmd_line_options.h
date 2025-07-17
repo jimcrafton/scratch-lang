@@ -452,7 +452,18 @@ namespace utils {
 
 				return result;
 			}
+			void process(const std::map<std::string, std::string>& args, const std::vector<std::string>& trailingArgs, const option_array_t& opts) {
+				original_cmd_line.clear();
+				for (auto arg:args) {
+					auto k = arg.first;
+					auto v = arg.second;
+					cmd_param param;
+					param.vals.push_back(v);
+					cmd_line_data.insert(cmd_line_map_t::value_type(k, param));
+				}
 
+				trailing_values = trailingArgs;
+			}
 
 			void process(int argc, char** argv, const option_array_t& opts) {
 				
@@ -476,6 +487,11 @@ namespace utils {
 						std::string arg = "";
 						bool clear_cur_param=false;
 						auto& opt = get_opt_for_name(cur_param,opts);
+						if (opt.is_null()) {
+							std::string errMsg = "invalid option '" + val + "'";
+							throw std::runtime_error(errMsg);
+						}
+
 						cmd_param param;
 						auto found = cmd_line_data.find(cur_param);
 						if (found != cmd_line_data.end()) {
@@ -588,19 +604,20 @@ namespace utils {
 			}
 		};
 
-		cmd_line_options(const std::string& name, option opts[], int count) {
-			set_opts(opts, count);
+		
+		cmd_line_options(const std::string& name, const option_array_t& opts) {
+			set_opts(opts);
 			set_app_name(name);
 		}
 
-		cmd_line_options( option opts[], int count) {
-			set_opts(opts, count);
+		cmd_line_options(const option_array_t& opts) {
+			set_opts(opts);
 		}
 
-		void set_opts(option opts[], int count) {
-			for (int i = 0;i < count;++i) {
-				if (!opts[i].is_null()) {
-					options.push_back(opts[i]);
+		void set_opts(const option_array_t& opts) {
+			for (auto opt:opts) {
+				if (!opt.is_null()) {
+					options.push_back(opt);
 				}
 			}
 		}
@@ -609,15 +626,14 @@ namespace utils {
 			return command_line;
 		}
 
-		bool parse( int argc, char** argv ) {
-			command_line.process(argc,argv, options);
+		bool parse() {
 			size_t parse_count = 0;
 			option_array_t req_opts;
 			required_options(req_opts);
 
 
-			for (auto& opt:options) {
-				
+			for (auto& opt : options) {
+
 				if (has_opt(opt)) {
 					auto arg = opt.short_name();
 					if (!command_line.has_switch(arg)) {
@@ -625,13 +641,13 @@ namespace utils {
 					}
 
 					auto param_count = command_line.param_count(arg);
-					for (int i = 0;i < param_count;++i) {
-						opt += command_line.param_val(arg,i);
+					for (int i = 0; i < param_count; ++i) {
+						opt += command_line.param_val(arg, i);
 					}
 					parsed_options.push_back(opt);
 					parse_count++;
 				}
-				
+
 			}
 
 			for (auto& opt : parsed_options) {
@@ -642,8 +658,26 @@ namespace utils {
 			if (parse_count < req_opts.size()) {
 				return false;
 			}
-			
+
 			return true;
+		}
+
+		bool parse(const std::map<std::string, std::string>& args, const std::vector<std::string>& trailingArgs) {
+			command_line.process(args, trailingArgs, options);
+			return parse();
+		}
+
+		bool parse( int argc, char** argv ) {
+			try {
+				command_line.process(argc, argv, options);
+			}
+			catch (const std::exception& e) {
+				std::cout << e.what() << std::endl;
+				return false;
+			}
+			
+			
+			return parse();
 		}
 
 		bool has_opt(const option& opt) {

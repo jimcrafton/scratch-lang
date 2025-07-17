@@ -4,6 +4,8 @@
 
 #include "cmd_line_options.h"
 
+
+
 namespace parser {
 
 	void ParserOptions::init(const utils::cmd_line_options& cmdline)
@@ -21,16 +23,8 @@ namespace parser {
 		options.init(cmdline);
 	}
 
-	void Comment::accept(language::AstVisitor& v) const
-	{
-		v.visitComment(*this);
-	}
 
 
-	void ParseNodeWithComments::accept(language::AstVisitor& v) const
-	{
-		
-	}
 
 	void TupleNode::accept(language::AstVisitor& v) const
 	{
@@ -57,6 +51,10 @@ namespace parser {
 		v.visitInstanceNode(*this);
 	}
 
+	void MsgInstanceNode::accept(language::AstVisitor& v) const
+	{
+		v.visitMsgInstanceNode(*this);
+	}
 
 	void NilNode::accept(language::AstVisitor& v) const
 	{
@@ -81,6 +79,10 @@ namespace parser {
 		v.visitGroupedExpression(*this);
 	}
 
+	void MessageParam::accept(language::AstVisitor& v) const
+	{
+		v.visitMessageParam(*this);
+	}
 
 	void Message::accept(language::AstVisitor& v) const
 	{

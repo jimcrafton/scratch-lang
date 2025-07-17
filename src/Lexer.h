@@ -12,74 +12,6 @@
 #include <iostream>
 
 
-namespace language {    
-    enum KeywordIdx {
-        KEYWORD_IF=0,
-        KEYWORD_ELSE,
-        KEYWORD_TRUE,
-        KEYWORD_FALSE,
-        KEYWORD_MODULE,
-        KEYWORD_PROGRAM,
-        KEYWORD_LIB,
-        KEYWORD_IMPORT,
-        KEYWORD_NAMESPACE,
-        KEYWORD_CLASS,
-        KEYWORD_RECORD,
-        KEYWORD_INHERITS,
-        KEYWORD_IMPLEMENTS,
-        KEYWORD_PRIVATE,
-        KEYWORD_PUBLIC,
-        KEYWORD_STATIC,
-        KEYWORD_RETURN,
-        KEYWORD_NIL,
-        KEYWORD_SELF,
-        KEYWORD_SUPER,
-        KEYWORD_MSG
-    };
-    const std::vector<std::string> Keywords = { 
-            "if",
-            "else",
-            "true",
-            "false",            
-            "module",
-            "program",
-            "lib",
-            "import",
-            "namespace",
-            "class",
-            "record",
-            "inherits",
-            "implements",
-            "private",
-            "public",
-            "static",
-            "return",
-            "nil",
-            "self",
-            "super",
-            "msg"
-    };
-
-    enum ReservedCharactersIdx {
-        RESERVED_CH_OPEN_PAREN=0,
-        RESERVED_CH_CLOSE_PAREN,
-        RESERVED_CH_OPEN_BRACKET,
-        RESERVED_CH_CLOSE_BRACKET,
-        RESERVED_CH_OPEN_BLOCK,
-        RESERVED_CH_CLOSE_BLOCK,
-        RESERVED_CH_END_OF_STATEMENT,
-        RESERVED_CH_ADDITION_OP,
-        RESERVED_CH_SUBTRACTION_OP,
-        RESERVED_CH_DIVISION_OP,
-        RESERVED_CH_MULTIPLICATION_OP,
-        RESERVED_CH_COLON,
-        RESERVED_CH_AT_SIGN,
-        RESERVED_CH_DOT,
-        
-    };
-    const std::string ReservedCharacters = "()[]{};+-/*:@.";
-}
-
 
 namespace lexer {
 
@@ -90,6 +22,7 @@ public:
     std::vector<size_t> newLines;
     std::string text;
     mutable std::vector<Token>::const_iterator curTokIt;
+    mutable std::vector<Token>::const_iterator savedCurTokIt;
 
     void clear() {
         tokens.clear();
@@ -103,10 +36,20 @@ public:
 
     void beginTokens() const  {
         curTokIt = tokens.begin();
+        savedCurTokIt = tokens.end();
     }
 
     const Token& getCurrentToken() const {
         return *curTokIt;
+    }
+
+    void saveCurrentToken() const {
+        savedCurTokIt = curTokIt;
+    }
+
+    void restoreCurrentToken() const {
+        curTokIt = savedCurTokIt;
+        savedCurTokIt = tokens.end();
     }
 
     const Token& getCurrentToken(int afterPos) const {
@@ -140,15 +83,27 @@ public:
         return true;
     }
 
-    bool peekNextToken(Token& t) const {
+    bool peekNextToken(Token& t, size_t offset=0) const {
         auto tmp = curTokIt;
-        ++tmp;
-        if (tmp == tokens.end()) {
-            return false;
+        if (offset == 0) {
+            ++tmp;
+            if (tmp == tokens.end()) {
+                return false;
+            }
+            else {
+                t = *tmp;
+            }
         }
         else {
-            t = *tmp;
+            tmp = curTokIt + offset + 1;
+            if (tmp == tokens.end()) {
+                return false;
+            }
+            else {
+                t = *tmp;
+            }
         }
+        
 
         return true;
     }
@@ -594,11 +549,19 @@ public:
     void processWhiteSpace(const char& ch) {
 
         if (isNewLine(ch)) {
-            if (!(ch == '\n' && currentText()[currentChIndex - 1] == '\r')) {
-                currentContext()->newLines.push_back(currentChIndex);
-                currentLine++;
-                currentCol = 0;
+            auto nextChar = 0;
+            if (currentChIndex < (currentText().size()-1) ) {
+                nextChar = currentText()[currentChIndex + 1];
             }
+            
+            if ((ch == '\r' && nextChar == '\n')) {
+                return; // pick it up next time we're in here
+            }
+
+            currentContext()->newLines.push_back(currentChIndex);
+            currentLine++;
+            currentCol = 0;
+                        
         }
     }
     //1 based array
@@ -610,11 +573,11 @@ public:
     void processToken(State state)
     {
         currentToken.type = Token::UNKNOWN;
-        currentToken.lineNumber = currentLine;
-        currentToken.colNumber = currentCol;
+        currentToken.location.lineNumber = currentLine;
+        currentToken.location.colNumber = currentCol == 0 ? currentCol : currentCol-1;
         currentToken.text.assign(currentText().c_str() + currentLexemeStart, currentLexemeEnd - currentLexemeStart);
-        currentToken.offset = currentLexemeStart;
-        currentToken.filename = currentFilename;
+        currentToken.location.offset = currentLexemeStart;
+        currentToken.location.filename = currentFilename;
 
         switch (state) {
             case STRING: {
@@ -652,6 +615,21 @@ public:
 
             case SUB_OPERATOR: {
                 currentToken.type = Token::SUBTRACTION_OPERATOR;
+            }
+            break;
+
+            case MULT_OPERATOR: {
+                currentToken.type = Token::MULT_OPERATOR;
+            }
+            break;
+
+            case DIV_OPERATOR: {
+                currentToken.type = Token::DIV_OPERATOR;
+            }
+            break;
+
+            case MOD_OPERATOR: {
+                currentToken.type = Token::MOD_OPERATOR;
             }
             break;
 
@@ -813,6 +791,18 @@ public:
                 }
                 else if (subtractionOperator(ch)) {
                     pushState(SUB_OPERATOR);
+                    reprocessCh = true;
+                }
+                else if (multOperator(ch)) {
+                    pushState(MULT_OPERATOR);
+                    reprocessCh = true;
+                }
+                else if (divOperator(ch)) {
+                    pushState(DIV_OPERATOR);
+                    reprocessCh = true;
+                }
+                else if (modOperator(ch)) {
+                    pushState(MOD_OPERATOR);
                     reprocessCh = true;
                 }
                 else if (endOfStatement(ch)) {
@@ -1062,6 +1052,24 @@ public:
             break;
 
             case SUB_OPERATOR: {
+                appendToLexeme = true;
+                tokenReady = true;
+            }
+            break;
+
+            case MULT_OPERATOR: {
+                appendToLexeme = true;
+                tokenReady = true;
+            }
+            break;
+
+            case DIV_OPERATOR: {
+                appendToLexeme = true;
+                tokenReady = true;
+            }
+            break;
+
+            case MOD_OPERATOR: {
                 appendToLexeme = true;
                 tokenReady = true;
             }
