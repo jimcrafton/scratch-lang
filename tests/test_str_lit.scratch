@@ -1,0 +1,6 @@
+{
+	foo: string;
+
+	foo := "hello";
+
+}

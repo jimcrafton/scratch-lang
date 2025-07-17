@@ -20,7 +20,7 @@ class bob inherits Man {
 		name: string;
 	}
 
-	msg toString : t:int34, isFat:bool [bool] {
+	msg toString : t:int34 isFat:bool [bool] {
 		return "my name is " + name ;
 	}
 }
@@ -36,12 +36,8 @@ d := 0.00112;
 p:Point;
 p.x := 100;
 
-
-#{
-msg main [int32] {
-	return 0;
-}
-}#
+f: foobar;
+f add: 3 num2:5;
 
 }
 

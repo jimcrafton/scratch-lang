@@ -1,0 +1,9 @@
+
+
+{
+
+runtime.main := msg (args:array) {
+	
+} ;
+
+}

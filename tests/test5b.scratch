@@ -5,11 +5,13 @@ module test2
 
 
 class foobar {
-	msg add: num1:int32, num2:int32  [int32] {
-	return num1 + num2;
+	msg add: num1:int32 num2:int32  [int32] {
+	return num1 + num2 + num2 * (num1+num2);
+	#return 0;
 	}
 }
 
 t := "hello";
 
+asd add: 12 goop: d+1;
 }

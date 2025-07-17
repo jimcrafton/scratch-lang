@@ -1,0 +1,31 @@
+
+
+#{
+test idea of a message with no reciever specified, should it go to
+runtime system object>?
+Is this a viable way to handle conditional flow control ?
+
+
+if (conditional) {true block}
+
+a := 1;
+
+if: a = 1 {
+
+}
+
+if : true  {
+
+}
+
+then becomes the equivalent of 
+
+runtime if: true {
+
+}
+
+
+
+
+}#
+
