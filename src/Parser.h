@@ -3161,21 +3161,33 @@ public:
 		if (token.type == lexer::Token::COMMENT_START || token.type == lexer::Token::COMMENT) {
 			auto commentNode = comment(*currentCtx, parent);
 			if (nullptr != commentNode) {
-				parent->comments.push_back(commentNode);
+				if (nullptr != parent) {
+					parent->comments.push_back(commentNode);
+				}
+				else {
+					delete commentNode;
+				}
 			}
 			nextToken(ctx, nullptr,false);
 		}
 	}
 
 
+	language::ParseNode* root = nullptr;
+
+
 	bool start() {
 		bool result = true;
 		currentCtx->beginTokens();
-
-		beginToken(*currentCtx,nullptr);
+		
+		language::ParseNode* tempRoot = new language::ParseNode();
+		beginToken(*currentCtx, tempRoot);
 
 		do {
 			
+			if (!currentCtx->hasTokensLeft()) {
+				break;
+			}
 
 			const lexer::Token& token = currentCtx->getCurrentToken();
 
@@ -3219,6 +3231,24 @@ public:
 				break;
 			}
 		} while (nextToken(*currentCtx, ast.root));
+
+		if (nullptr != ast.root) {
+			if (!tempRoot->comments.empty()) {
+
+				for (auto comment: tempRoot->comments) {
+					language::Comment* c = new language::Comment();
+					c->commentsText = comment->commentsText;
+					c->parent = ast.root;
+					c->token = comment->token;
+					ast.root->comments.push_back(c);
+				}
+			}
+			delete tempRoot;
+		}
+		else {
+			ast.root = tempRoot;
+			result = true;
+		}
 
 		return result;
 	}

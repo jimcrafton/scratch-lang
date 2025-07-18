@@ -34,6 +34,10 @@ public:
         return tokens.size();
     }
 
+    bool hasTokensLeft() const {
+        return curTokIt != tokens.end();
+    }
+
     void beginTokens() const  {
         curTokIt = tokens.begin();
         savedCurTokIt = tokens.end();

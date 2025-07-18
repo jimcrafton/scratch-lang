@@ -22,6 +22,7 @@
     <ClCompile Include="src\ast.cpp" />
     <ClCompile Include="src\compiler.cpp" />
     <ClCompile Include="src\compiletime.cpp" />
+    <ClCompile Include="src\datatypes.cpp" />
     <ClCompile Include="src\Parser.cpp" />
     <ClCompile Include="src\runtime.cpp" />
     <ClCompile Include="src\scratch-tool.cpp" />
@@ -33,6 +34,7 @@
     <ClInclude Include="src\cmd_line_options.h" />
     <ClInclude Include="src\Compiler.h" />
     <ClInclude Include="src\compiletime.h" />
+    <ClInclude Include="src\datatypes.h" />
     <ClInclude Include="src\Lexer.h" />
     <ClInclude Include="src\Parser.h" />
     <ClInclude Include="src\Runtime.h" />
@@ -41,6 +43,26 @@
     <ClInclude Include="src\types.h" />
     <ClInclude Include="src\version.h" />
     <ClInclude Include="src\win32utils.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="grammar_ideas.txt" />
+    <Text Include="syntax_ideas.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="tests\test1.scratch" />
+    <None Include="tests\test2.scratch" />
+    <None Include="tests\test3.scratch" />
+    <None Include="tests\test4.scratch" />
+    <None Include="tests\test5.scratch" />
+    <None Include="tests\test5b.scratch" />
+    <None Include="tests\test_literal_vars.scratch" />
+    <None Include="tests\test_main.scratch" />
+    <None Include="tests\test_msg1.scratch" />
+    <None Include="tests\test_msg2.scratch" />
+    <None Include="tests\test_msg_no_recvr.scratch" />
+    <None Include="tests\test_static_msg.scratch" />
+    <None Include="tests\test_str_lit.scratch" />
+    <None Include="tests\test_vars1.scratch" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

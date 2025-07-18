@@ -149,26 +149,6 @@
   <ItemGroup>
     <ClCompile Include="src\scratch-tool-main.cpp" />
   </ItemGroup>
-  <ItemGroup>
-    <Text Include="grammar_ideas.txt" />
-    <Text Include="syntax_ideas.txt" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="tests\test1.scratch" />
-    <None Include="tests\test2.scratch" />
-    <None Include="tests\test3.scratch" />
-    <None Include="tests\test4.scratch" />
-    <None Include="tests\test5.scratch" />
-    <None Include="tests\test5b.scratch" />
-    <None Include="tests\test_literal_vars.scratch" />
-    <None Include="tests\test_main.scratch" />
-    <None Include="tests\test_msg1.scratch" />
-    <None Include="tests\test_msg2.scratch" />
-    <None Include="tests\test_msg_no_recvr.scratch" />
-    <None Include="tests\test_static_msg.scratch" />
-    <None Include="tests\test_str_lit.scratch" />
-    <None Include="tests\test_vars1.scratch" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
