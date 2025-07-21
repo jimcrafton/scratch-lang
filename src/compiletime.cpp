@@ -94,6 +94,23 @@ namespace compiletime {
 		}
 	}
 
+	void ExecutableFragment::init(const CppString& n, compiler::Compiler& c)
+	{
+		name = n;
+		Module* m = new Module(c);
+		modules.insert(std::make_pair(m->getName(), m));
+		m->resetScope();
+	}
+
+	Module* ExecutableFragment::primaryModule()
+	{
+		if (modules.empty()) {
+			return nullptr;
+		}
+		auto first = modules.begin();
+		return first->second;
+	}
+
 	ScopedEnvironment* Module::popCurrentScope() {
 		ScopedEnvironment* result = currentScope;
 		auto parent = currentScope->parent;

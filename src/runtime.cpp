@@ -4,18 +4,15 @@
 
 
 
-
 namespace runtime {
 		
 
-
-		
 
 
 	Runtime Runtime::rtInstance;
 	Runtime::Runtime()
 	{
-
+		
 	}
 
 	Runtime::~Runtime()
@@ -25,15 +22,14 @@ namespace runtime {
 
 	bool Runtime::init()
 	{
-		Runtime::rtInstance.stringPool = new StringPool();
+		
 
 		return true;
 	}
 
 	bool Runtime::finish()
 	{
-		delete Runtime::rtInstance.stringPool;
-		Runtime::rtInstance.stringPool = nullptr;
+		
 		return true;
 	}
 	

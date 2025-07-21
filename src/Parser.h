@@ -2618,6 +2618,8 @@ public:
 		//  1             2           3            4       
 		//variable_def | assignment| expression | return-expression    end_of_statement
 
+		bool emptyBlock = false;
+
 		switch (first.type) {
 			case lexer::Token::IDENTIFIER: {
 				//options - 
@@ -2635,20 +2637,6 @@ public:
 					ctx.restoreCurrentToken();
 					result = variableDef(ctx, parent);
 				}
-				/*
-				else if (ctx.getCurrentToken().type == lexer::Token::DOT) {  //3 or 4
-					nextToken(ctx, parent);
-					
-					verifyTokenTypeOrFail(ctx.getCurrentToken(),
-						lexer::Token::IDENTIFIER,
-						ctx,
-						"Parsing variable qualifier/namespace, identifier",
-						result);
-
-					ctx.restoreCurrentToken();
-					result = variableDef(ctx, parent);
-				}
-				*/
 				else {
 					ctx.restoreCurrentToken();
 					result = expression(ctx, parent);
@@ -2671,81 +2659,23 @@ public:
 				result = expression(ctx, parent);
 			}break;
 
+
+			case lexer::Token::CLOSE_BLOCK: { //group! let expression handle it				
+				if (nullptr == result) {
+					auto prevTok = this->peekPrev(ctx);
+					if (prevTok.type == lexer::Token::OPEN_BLOCK) {
+						emptyBlock = true;
+					}
+				}
+			}break;
+			
 			default: {
 				error(ctx.getCurrentToken(), ctx, "Parsing statement, invalid code", result);
 			} break;
 		}
 
 
-		nextToken(ctx, result);
-		verifyTokenTypeOrFail(ctx.getCurrentToken(),
-			lexer::Token::END_OF_STATEMENT,
-			ctx,
-			"Parsing statement, expected end of statement: ';'",
-			result);
-
-		
-		/*
-		auto first = ctx.getCurrentToken();
-		
-		currentNodeFlags.flags.clear();
-
-		if (first.type == lexer::Token::AT_SIGN) {
-
-			currentNodeFlags = compilerFlags(ctx, parent);
-			nextToken(ctx, parent);
-
-			first = ctx.getCurrentToken();
-		}
-
-		if (first.type == lexer::Token::IDENTIFIER) {
-			nextToken(ctx, parent);
-			auto tok = ctx.getCurrentToken();
-
-			if (tok.type == lexer::Token::ASSIGMENT_OPERATOR) {
-				prevToken(ctx);
-				result = assignment(ctx, parent);
-				Assignment* assignmentNode = dynamic_cast<Assignment*>(result);
-				addCompilerFlagsToNode(*assignmentNode->instance);
-			}
-			//else if (tok.type == lexer::Token::DOT) {
-				//instance
-			//	prevToken(ctx);
-				//auto inst = instance(ctx, parent);
-
-			//}
-			else if (tok.type == lexer::Token::COLON) {
-				//could be a var definition (i.e. foo:int8) 
-				//or could be assignment ( foo:int8 := 99)
-				//check for tyerminating ';' char
-				lexer::Token::Type types[] = { lexer::Token::COLON, lexer::Token::IDENTIFIER, lexer::Token::END_OF_STATEMENT};
-				if (lookAhead(types, sizeof(types)/sizeof(types[0]), ctx)) {
-					prevToken(ctx);
-					result = variableDef(ctx, parent);
-					addCompilerFlagsToNode(*result);
-				}
-				else {
-					prevToken(ctx);
-
-					result = assignment(ctx, parent);
-				}
-			}
-			else {
-				prevToken(ctx);
-				result = expression(ctx, parent);
-			}
-
-			nextToken(ctx,result);
-			verifyTokenTypeOrFail(ctx.getCurrentToken(),
-				lexer::Token::END_OF_STATEMENT,
-				ctx,
-				"Parsing statement, expected end of statement: ';'",
-				result);
-		}
-		else if (first.type == lexer::Token::KEYWORD && first.text == language::Keywords[language::KEYWORD_RETURN]) {
-			
-			result = expression(ctx, parent);
-
+		if (!emptyBlock) {
 			nextToken(ctx, result);
 			verifyTokenTypeOrFail(ctx.getCurrentToken(),
 				lexer::Token::END_OF_STATEMENT,
@@ -2753,24 +2683,6 @@ public:
 				"Parsing statement, expected end of statement: ';'",
 				result);
 		}
-		else if (first.type == lexer::Token::OPEN_PAREN) {
-			//expression
-			result = groupedExpression(ctx, parent);
-
-			nextToken(ctx, result);
-			verifyTokenTypeOrFail(ctx.getCurrentToken(),
-				lexer::Token::END_OF_STATEMENT,
-				ctx,
-				"Parsing statement, expected end of statement: ';'",
-				result);
-		}
-		else {
-			error(ctx.getCurrentToken(), ctx, "Parsing statement, invalid code", result);
-		}
-
-
-		
-		*/
 
 		currentNodeFlags.flags.clear();
 

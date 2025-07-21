@@ -479,6 +479,11 @@ namespace compiletime {
 		CppString version = "1.0.0";
 
 		ModuleMapT modules;
+
+
+		virtual void init(const CppString& n, compiler::Compiler& c);
+
+		Module* primaryModule();
 	};
 
 	class Program : public ExecutableFragment {

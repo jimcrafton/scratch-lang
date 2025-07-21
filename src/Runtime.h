@@ -9,6 +9,9 @@
 #include "types.h"
 #include "datatypes.h"
 
+
+
+
 namespace datatypes {
 	class string_storage;
 }
@@ -17,21 +20,6 @@ namespace runtime {
 	class Runtime;
 
 		
-
-		
-
-	class StringPool {
-	public:
-		std::unordered_map<uint64_t, datatypes::string_storage*> stringMap;
-
-		static datatypes::string_storage* allocate();
-
-		static datatypes::string_storage* allocate(const datatypes::string::charT* c_strPtr, size_t len);
-
-		static void deallocate(datatypes::string_storage* str);
-	};
-
-
 
 
 	class Runtime {
@@ -79,15 +67,14 @@ namespace runtime {
 
 		static const datatypes::objectinfo& getInfo(const datatypes::object& obj);
 
+
 		static const datatypes::Record* getRecord(const datatypes::object& obj);
 		static const datatypes::Class* getClass(const datatypes::object& obj);
 	private:
-		friend class StringPool;
 
 		Runtime();
 		~Runtime();
 
-		StringPool* stringPool = nullptr;
 
 		::std::vector< datatypes::objectinfo>  objInfoList;
 

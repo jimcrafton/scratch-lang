@@ -339,12 +339,49 @@ namespace compiler {
 		}
 
 		if (!executableCodePtr) {
-			programInst = new compiletime::Program();
-			programInst->setName("a");
+			programInst = new compiletime::Program();			
+			programInst->init("a", *this);
 			executableCodePtr.reset(programInst);
-			compiletime::Module* m = new compiletime::Module(*this);
-			executableCodePtr->modules.insert(std::make_pair(m->getName(), m));
+			
 		}
+
+
+		//add runtime
+		
+
+
+		/*
+		llvm::Constant* rtConst = nullptr;
+		std::string rtClassName = "TestMe";
+		std::string rtVarName = "runtime";
+
+		llvm::StructType* rtClassType = llvm::StructType::create(*llvmCtxPtr, rtClassName);
+
+		std::vector<llvm::Type*> classMembers;
+		classMembers.push_back(llvm::Type::getInt32Ty(*llvmCtxPtr));
+		rtClassType->setBody(classMembers);
+
+
+
+		llvm::GlobalVariable* rtGlobalVar = new llvm::GlobalVariable(
+			*module->llvmModulePtr,                      // Module
+			rtClassType,            // Type of the global variable
+			false,                   // Is constant? (false for mutable)
+			llvm::GlobalValue::ExternalLinkage, // Linkage type
+			nullptr,                 // Initializer (nullptr for uninitialized)
+			rtVarName       // Name of the global variable
+		);
+		*/
+		/*
+		llvm::AllocaInst* stackRt = llvmBuilderPtr->CreateAlloca(
+			rtClassType,         // The LLVM StructType
+			nullptr,               // ArraySize (nullptr for a single instance)
+			rtVarName             // Name of the stack variable
+		);
+		*/
+		//module->llvmModulePtr->getOrInsertGlobal(rtVarName, rtConst->getType());
+		
+		
 
 		stage3();
 	}
@@ -431,14 +468,57 @@ namespace compiler {
 
 	std::string Compiler::mainEntryFunction()
 	{
-		return "runtime_main";
+		return "main";// "runtime_main";
 	}
 
 	void Compiler::createMainEntryPoint()
 	{
 			
 		std::string mainFuncName = Compiler::mainEntryFunction();
-		auto returnType = llvm::FunctionType::get(llvmBuilderPtr->getInt32Ty(), false);
+
+		
+		std::string rtinit = "Runtime_init";
+
+		mainEntryModulePtr->getOrInsertFunction(
+			rtinit,
+			llvm::FunctionType::get(
+				llvmBuilderPtr->getInt32Ty(),
+				llvmBuilderPtr->getVoidTy(), 
+				false
+			)
+		);
+		
+		llvm::Type* CharTy = llvm::Type::getInt8Ty(*llvmCtxPtr);
+		llvm::Type* CharPtrTy = llvm::PointerType::get(CharTy, 0);
+		llvm::Type* ArgVPtrTy = llvm::PointerType::get(CharPtrTy, 0);
+
+		
+
+
+		std::string rtMain = "Runtime_main_entry_point";
+
+		mainEntryModulePtr->getOrInsertFunction(
+			rtMain,
+			llvm::FunctionType::get(
+				llvmBuilderPtr->getInt32Ty(),
+				llvmBuilderPtr->getVoidTy(),
+				false
+			)
+		);
+
+		std::string rtTerm = "Runtime_terminate";
+
+		mainEntryModulePtr->getOrInsertFunction(
+			rtTerm,
+			llvm::FunctionType::get(
+				llvmBuilderPtr->getVoidTy(),
+				llvmBuilderPtr->getVoidTy(),
+				false
+			)
+		);
+		
+		
+		auto returnType = llvm::FunctionType::get(llvmBuilderPtr->getInt32Ty(), llvmBuilderPtr->getVoidTy(), false);
 		auto mainFunc = mainEntryModulePtr->getFunction(mainFuncName);
 		if (nullptr == mainFunc) {
 			auto mainFuncProto = llvm::Function::Create(returnType,
@@ -447,20 +527,45 @@ namespace compiler {
 				*mainEntryModulePtr);
 			verifyFunction(*mainFuncProto);
 
+
+			
+
+			
+
 			auto block = llvm::BasicBlock::Create(*llvmCtxPtr, mainFuncName, mainFuncProto);
 
 			llvmBuilderPtr->SetInsertPoint(block);
 
 			mainFunc = mainFuncProto;
 		}
-
 			
 		mainEntryFunc = mainFunc;
 
-		auto mainReturnCode = 0;
-		auto retVal = llvmBuilderPtr->getInt32(mainReturnCode);
-		auto i32Res = llvmBuilderPtr->CreateIntCast(retVal, llvmBuilderPtr->getInt32Ty(), true);
-		llvmBuilderPtr->CreateRet(i32Res);
+		auto rtInitFunc = mainEntryModulePtr->getFunction(rtinit);
+		std::vector<llvm::Value*> NoArgs;
+		llvmBuilderPtr->CreateCall(rtInitFunc, NoArgs);
+
+
+
+
+		
+
+		auto rtMainFunc = mainEntryModulePtr->getFunction(rtMain);
+
+
+		auto retVal = llvmBuilderPtr->CreateCall(rtMainFunc, NoArgs);
+
+
+
+		auto rtTermFunc = mainEntryModulePtr->getFunction(rtTerm);
+
+		llvmBuilderPtr->CreateCall(rtTermFunc, NoArgs);
+
+
+		//auto mainReturnCode = 0;
+		//auto retVal = llvmBuilderPtr->getInt32(mainReturnCode);
+		//auto i32Res = llvmBuilderPtr->CreateIntCast(mainRetVal, llvmBuilderPtr->getInt32Ty(), true);
+		llvmBuilderPtr->CreateRet(retVal);
 			
 
 	}
@@ -469,13 +574,10 @@ namespace compiler {
 	{ 
 		if (nullptr == executableCodePtr) {
 			programInst = new compiletime::Program();
-			programInst->setName("a");
+			programInst->init("a", *this);
 			executableCodePtr.reset(programInst);
-			compiletime::Module* m = new compiletime::Module(*this);
-			executableCodePtr->modules.insert(std::make_pair(m->getName(), m));
-			m->resetScope();
 
-			currentModule = m;
+			currentModule = executableCodePtr->primaryModule();
 		}
 
 		Stage1 s1(*this);
@@ -831,7 +933,7 @@ namespace compiler {
 	void Compiler::stage1Variable(const parser::VariableNode& node)
 	{
 		if (options.debugMode) {
-			std::cout << "variable: " << node.getFullPath() << ":" << node.name << std::endl;
+			std::cout << "variable: {" << node.getFullPath() << "}:" << node.name << std::endl;
 		}
 			
 
@@ -1152,7 +1254,7 @@ namespace compiler {
 	void Linker::link(const Compiler& compiler)
 	{
 		//run llvm linker
-		std::string link_command = "/verbose /subsystem:console /entry:" + Compiler::mainEntryFunction() + " ";
+		std::string link_command = "/verbose /subsystem:CONSOLE /nodefaultlib /entry:" + Compiler::mainEntryFunction() + " ";
 			
 
 
@@ -1165,10 +1267,25 @@ namespace compiler {
 		}
 
 		link_command += "/out:" + outputFileName + " ";
+
+
+		objs.push_back("scratch-lang-runtime/x64/Debug/scratch_runtime.obj");
+
 		for (auto obj : objs) {
 			link_command += obj + " ";
 		}
+
+
 			
+		std::vector<std::string> win32CRTLibs = { "kernel32.lib", "user32.lib", "Shell32.lib"};// , "ucrt.lib", "msvcrt.lib", "vcruntime.lib"
+	
+		for (auto lib : win32CRTLibs) {
+			link_command += lib + " ";
+		}
+
+
+		Compiler::println( "command: lld-link " + link_command );
+
 		{
 			utils::process process(
 				[](const std::string& output) -> void {

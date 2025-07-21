@@ -3,10 +3,9 @@
 #include "runtime.h"
 
 
-
 TEST(TestRuntimeObjects, Test_objectinfo_flags) {
 
-	language::runtime::datatypes::objectinfo_flags flags;
+	datatypes::objectinfo_flags flags;
 	flags.setMemType(false);
 	EXPECT_EQ(true, flags.isMemOnStack());
 	EXPECT_EQ(false, flags.isMemOnHeap());
@@ -21,8 +20,8 @@ TEST(TestRuntimeObjects, Test_objectinfo_sizes) {
 
 	
 	
-	EXPECT_EQ(sizeof(uint32_t), sizeof(language::runtime::datatypes::objectinfo_flags));
+	EXPECT_EQ(sizeof(uint32_t), sizeof(datatypes::objectinfo_flags));
 
-	EXPECT_EQ(sizeof(uint64_t), sizeof(language::runtime::datatypes::objectinfo_ptr));
+	EXPECT_EQ(sizeof(uint64_t), sizeof(datatypes::objectinfo_ptr));
 	
 }

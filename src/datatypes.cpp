@@ -1,6 +1,6 @@
 #include "datatypes.h"
 #include <unordered_map>
-#include "runtime.h"
+//#include "runtime.h"
 
 namespace datatypes {
 
@@ -9,7 +9,7 @@ namespace datatypes {
 		std::string data;
 		uint64_t refcount = 0;
 		uint64_t size = 0;
-		runtime::StringPool* pool = nullptr;
+		//runtime::StringPool* pool = nullptr;
 		mutable uint64_t hashval = 0;
 
 		string_storage() {}
@@ -33,6 +33,7 @@ namespace datatypes {
 }
 
 namespace runtime {
+	/*
 	datatypes::string_storage* StringPool::allocate()
 	{
 		datatypes::string_storage* result = nullptr;
@@ -64,6 +65,7 @@ namespace runtime {
 	{
 		printf("deallocating string instance %p... \n", str);
 	}
+	*/
 }
 
 	
@@ -76,14 +78,14 @@ namespace datatypes {
 
 	string::string()
 	{
-		data = runtime::StringPool::allocate();
+		data = new datatypes::string_storage();
 	}
 
 	string::~string()
 	{
 		string_storage* ptr = (string_storage*)data;
 
-		runtime::StringPool::deallocate(ptr);
+		delete ptr;
 	}
 
 	string::string(const string& rhs) :
@@ -105,7 +107,9 @@ namespace datatypes {
 		if (nullptr != ptr) {
 			delete ptr;
 		}
-		data = runtime::StringPool::allocate(v.c_str(), v.length());
+		ptr = new datatypes::string_storage();
+		ptr->data = v;
+		//runtime::StringPool::allocate(v.c_str(), v.length());
 	}
 
 	void string::assign(const charT* c_strPtr)
@@ -114,8 +118,9 @@ namespace datatypes {
 		if (nullptr != ptr) {
 			delete ptr;
 		}
-
-		data = runtime::StringPool::allocate(c_strPtr, strlen(c_strPtr));
+		ptr = new datatypes::string_storage();
+		ptr->data = c_strPtr;
+		//data = runtime::StringPool::allocate(c_strPtr, strlen(c_strPtr));
 	}
 
 	uint64_t string::hash() const
@@ -144,7 +149,7 @@ namespace datatypes {
 
 	const objectinfo& object::info() const
 	{
-		return runtime::Runtime::getInfo(*this);
+		return objectinfo::nil();//   runtime::Runtime::getInfo(*this);
 	}
 
 

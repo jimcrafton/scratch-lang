@@ -32,7 +32,7 @@ namespace datatypes {
 
 		void assign(const ::std::string& v);
 
-		void assign(const charT* c_strPtr);
+		void assign(const charT* c_strPtr);		
 
 		uint64_t length() const;
 		uint64_t empty() const;
