@@ -2712,6 +2712,10 @@ public:
 
 		ParseStateGuard pg(*this, NAMESPACE_BLOCK, ctx, "Parsing namespace, invalid state exiting parse", result);
 
+		if (ctx.getCurrentToken().type != lexer::Token::KEYWORD &&
+			ctx.getCurrentToken().text != language::Keywords[language::KEYWORD_NAMESPACE]) {
+			return result;
+		}
 						
 		verifyTokenOrFail(ctx.getCurrentToken(), 
 			lexer::Token::KEYWORD,
@@ -2751,6 +2755,9 @@ public:
 		if (nextTok.type == lexer::Token::KEYWORD && nextTok.text == language::Keywords[language::KEYWORD_NAMESPACE]) {
 			NamespaceBlock* childNamespace = namespaceBlock(ctx, result);
 			result->namespaces.push_back(childNamespace);
+			if (ctx.getCurrentToken().type == lexer::Token::CLOSE_BLOCK) {
+				checkForClose = false;
+			}
 		}
 		else if (nextTok.type == lexer::Token::CLOSE_BLOCK ) {
 			checkForClose = false;
@@ -2770,7 +2777,6 @@ public:
 			result);
 
 		
-
 		return result;
 	}
 
@@ -2901,11 +2907,19 @@ public:
 		tok = ctx.getCurrentToken();
 		
 		if (tok.type == lexer::Token::KEYWORD && tok.text == language::Keywords[language::KEYWORD_NAMESPACE]) {
+
 			auto namespaceBlk = namespaceBlock(ctx, block);
+			
 			while (namespaceBlk != nullptr) {
 				block->namespaces.push_back(namespaceBlk);
 
+				
+
 				nextToken(ctx, namespaceBlk);
+				
+				if (!ctx.hasTokensLeft()) {
+					break;
+				}
 
 				auto& tok = ctx.getCurrentToken();
 				if (tok.type == lexer::Token::CLOSE_BLOCK) {
@@ -2913,6 +2927,13 @@ public:
 				}
 
 				namespaceBlk = namespaceBlock(ctx, block);
+			}
+
+			if (ctx.hasTokensLeft()) {
+				StatementsBlock* res = statements(ctx, block);
+				if (res) {
+					block->statements = res;
+				}
 			}
 		}
 		else {

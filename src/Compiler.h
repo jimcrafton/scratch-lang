@@ -37,7 +37,7 @@
 
 
 
-#include "llvm/IR/IRBuilder.h"
+
 #include "llvm/IR/LLVMContext.h"
 
 #include "llvm/IR/Verifier.h"
@@ -207,6 +207,11 @@ namespace compiler {
 		const utils::cmd_line_options& cmdlineOpts;
 			
 		void stage1NewModule(const parser::ModuleBlock& node);
+		void stage1NewNamespace(const parser::NamespaceBlock& node);
+		void stage1CloseNamespace(const parser::NamespaceBlock& node);
+		
+		
+
 		void stage1NewClass(const parser::ClassBlock& node);
 		void stage1CloseClassBlock(const parser::ClassBlock& node);
 			
@@ -270,7 +275,12 @@ namespace compiler {
 
 		void buildFunctions(const compiletime::ScopedEnvironment& scope);
 		void buildFunction(const compiletime::Instance* receiver, const compiletime::Message& msg, const compiletime::ScopedEnvironment& scope);
-		void buildFunction(const compiletime::Instance* receiver, const CppString& selector, const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope);
+		void buildFunction(const compiletime::Instance* receiver, const compiletime::MessageSelector& selector, const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope);
+		
+		void buildAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope);
+		void buildIntegerAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope);
+		void buildRealAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope);
+		
 
 		void outputModule(compiletime::Module* module, OutputFormat outFmt, const CppString& objName);
 	};

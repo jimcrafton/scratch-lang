@@ -19,54 +19,22 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\ast.cpp" />
-    <ClCompile Include="src\compiler.cpp" />
-    <ClCompile Include="src\compiletime.cpp" />
-    <ClCompile Include="src\datatypes.cpp" />
-    <ClCompile Include="src\Parser.cpp" />
-    <ClCompile Include="src\scratch-tool.cpp" />
-    <ClCompile Include="src\Token.cpp" />
-    <ClCompile Include="src\win32utils.cpp" />
+    <ClCompile Include="src\runtime.cpp" />
+    <ClCompile Include="src\scratch_runtime.cpp">
+      <BufferSecurityCheck Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</BufferSecurityCheck>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\AST.h" />
-    <ClInclude Include="src\cmd_line_options.h" />
-    <ClInclude Include="src\Compiler.h" />
-    <ClInclude Include="src\compiletime.h" />
-    <ClInclude Include="src\datatypes.h" />
-    <ClInclude Include="src\Lexer.h" />
-    <ClInclude Include="src\Parser.h" />
-    <ClInclude Include="src\string_ref.h" />
-    <ClInclude Include="src\Token.h" />
-    <ClInclude Include="src\types.h" />
-    <ClInclude Include="src\version.h" />
-    <ClInclude Include="src\win32utils.h" />
+    <ClInclude Include="src\Runtime.h" />
+    <ClInclude Include="src\scratch_runtime.h" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="grammar_ideas.txt" />
-    <Text Include="syntax_ideas.txt" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="tests\test1.scratch" />
-    <None Include="tests\test2.scratch" />
-    <None Include="tests\test3.scratch" />
-    <None Include="tests\test4.scratch" />
-    <None Include="tests\test5.scratch" />
-    <None Include="tests\test5b.scratch" />
-    <None Include="tests\test_literal_vars.scratch" />
-    <None Include="tests\test_main.scratch" />
-    <None Include="tests\test_msg1.scratch" />
-    <None Include="tests\test_msg2.scratch" />
-    <None Include="tests\test_msg_no_recvr.scratch" />
-    <None Include="tests\test_static_msg.scratch" />
-    <None Include="tests\test_str_lit.scratch" />
-    <None Include="tests\test_vars1.scratch" />
-    <None Include="tests\test_vars_namespaces1.scratch" />
+    <MASM Include="src\rt_lang_memcpy.asm" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{c5c3d8f6-9622-48cb-8369-38a0a81baf2e}</ProjectGuid>
+    <ProjectGuid>{A4A584D1-4341-4C19-9D2D-F5ABF4213B15}</ProjectGuid>
     <RootNamespace>scratchlanglib</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
@@ -88,17 +56,18 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
-    <CharacterSet>Unicode</CharacterSet>
+    <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
-    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
@@ -120,12 +89,14 @@
     <LibraryPath>D:\code\llvm-project-llvmorg-19.1.6\built\LLVM\lib;$(LibraryPath)</LibraryPath>
     <TargetName>$(ProjectName)_$(Platform)_$(Configuration)</TargetName>
     <OutDir>$(SolutionDir)\libs\</OutDir>
+    <IntDir>$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>D:\code\llvm-project-llvmorg-19.1.6\built\LLVM\include;$(IncludePath)</IncludePath>
     <LibraryPath>D:\code\llvm-project-llvmorg-19.1.6\built\LLVM\lib;$(LibraryPath)</LibraryPath>
     <TargetName>$(ProjectName)_$(Platform)_$(Configuration)</TargetName>
     <OutDir>$(SolutionDir)\libs\</OutDir>
+    <IntDir>$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -164,8 +135,8 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
-      <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_NDEBUG;SCRATCH_RUNTIME_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;WIN32;_WINDOWS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>SCRATCH_RUNTIME_DEBUG;NDEBUG;_LIB;_NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;WIN32;_WINDOWS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
@@ -174,26 +145,38 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <DisableSpecificWarnings>4141;4146;4244;4267;4291;4351;4456;4457;4458;4459;4503;4624;4722;4100;4127;4512;4505;4610;4510;4702;4245;4706;4310;4701;4703;4389;4611;4805;4204;4577;4091;4592;4319;4709;5105;4324</DisableSpecificWarnings>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
     </ClCompile>
     <Link>
       <SubSystem>
       </SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <Command>mkdir $(ProjectName)\objs\
+copy $(IntDir)scratch_runtime.obj $(ProjectName)\objs\scratch_runtime_$(Platform)_$(ConfigurationName).obj
+copy $(IntDir)rt_lang_memcpy.obj $(ProjectName)\objs\rt_lang_memcpy_$(Platform)_$(ConfigurationName).obj</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
-      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <FunctionLevelLinking>
+      </FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_LIB;_CONSOLE;_CRT_SECURE_NO_WARNINGS;WIN32;_WINDOWS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_LIB;_NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;WIN32;_WINDOWS;_HAS_EXCEPTIONS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <DisableSpecificWarnings>4141;4146;4244;4267;4291;4351;4456;4457;4458;4459;4503;4624;4722;4100;4127;4512;4505;4610;4510;4702;4245;4706;4310;4701;4703;4389;4611;4805;4204;4577;4091;4592;4319;4709;5105;4324</DisableSpecificWarnings>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
+      <ExceptionHandling>false</ExceptionHandling>
+      <Optimization>MaxSpeed</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>
@@ -202,8 +185,15 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
+    <PostBuildEvent>
+      <Command>mkdir $(ProjectName)\objs\
+copy $(IntDir)scratch_runtime.obj $(ProjectName)\objs\scratch_runtime_$(Platform)_$(ConfigurationName).obj
+copy $(IntDir)rt_lang_memcpy.obj $(ProjectName)\objs\rt_lang_memcpy_$(Platform)_$(ConfigurationName).obj
+</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
   </ImportGroup>
 </Project>

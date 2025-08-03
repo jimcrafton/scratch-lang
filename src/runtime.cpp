@@ -8,7 +8,7 @@ namespace runtime {
 		
 
 
-
+	/*
 	Runtime Runtime::rtInstance;
 	Runtime::Runtime()
 	{
@@ -196,4 +196,5 @@ namespace runtime {
 		Runtime::rtInstance.objInfoList.push_back(info);
 
 	}
+	*/
 }

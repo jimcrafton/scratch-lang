@@ -33,7 +33,78 @@ namespace typesystem {
 		typeMessage,
 	};
 
+	inline bool isTypePrimitive(TypeDescriptor td) {
+		switch (td) {
+
+			case typeBit1 : case typeBool:
+			case typeInteger8: case typeUInteger8:
+			case typeInteger16: case typeUInteger16: 
+			case typeInteger32: case typeUInteger32: 
+			case typeInteger64: case typeUInteger64: 
+			case typeInteger128: case typeUInteger128: 
+			case typeDouble32: case typeDouble64: {
+				return true;
+			}break;
+
+			default: {
+				
+			}break;
+		}
+
+		return false;
+	}
+
+	inline bool isTypeRealNumber(TypeDescriptor td) {
+		switch (td) {
+
+			case typeDouble32: case typeDouble64: {
+				return true;
+			}break;
+
+			default: {
+
+			}break;
+		}
+
+		return false;
+	}
+
+	inline bool isTypeInt(TypeDescriptor td) {
+		switch (td) {
 		
+			case typeInteger8: case typeUInteger8:
+			case typeInteger16: case typeUInteger16:
+			case typeInteger32: case typeUInteger32:
+			case typeInteger64: case typeUInteger64:
+			case typeInteger128: case typeUInteger128: {
+				return true;
+			}break;
+
+			default: {
+
+			}break;
+		}
+
+		return false;
+	}
+
+	inline bool isTypeUnsigned(TypeDescriptor td) {
+		switch (td) {
+			case typeUInteger8:
+			case typeUInteger16:
+			case typeUInteger32:
+			case typeUInteger64:
+			case typeUInteger128: {
+				return true;
+			}break;
+
+			default: {
+
+			}break;
+		}
+
+		return false;
+	}
 
 
 

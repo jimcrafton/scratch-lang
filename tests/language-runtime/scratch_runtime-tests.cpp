@@ -35,19 +35,19 @@ TEST(TestScratchRuntime, Test_runtime_number_sizes) {
 TEST(TestScratchRuntime, Test_runtime_mem) {
 
 
-	struct RuntimeMemory memInfo;
-	memInfo.type = (RuntimeTypeDescriptor)980989;
+	struct Runtime_memory_info memInfo;
+	memInfo.type = (Runtime_TypeDescriptor)980989;
 	memInfo.memPtr = (void*)&printf;
 	
 
-	EXPECT_EQ(memInfo.type, (RuntimeTypeDescriptor)980989);
+	EXPECT_EQ(memInfo.type, (Runtime_TypeDescriptor)980989);
 	EXPECT_EQ(memInfo.memPtr, (void*)&printf);
 
 	
 
 	Runtime_RuntimeMemory_init(&memInfo);
 
-	EXPECT_EQ(memInfo.type, (RuntimeTypeDescriptor)0);
+	EXPECT_EQ(memInfo.type, (Runtime_TypeDescriptor)0);
 	EXPECT_EQ(memInfo.memPtr, (void*)0);
 }
 

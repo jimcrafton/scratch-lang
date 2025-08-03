@@ -2,6 +2,7 @@
 #include <unordered_map>
 //#include "runtime.h"
 
+
 namespace datatypes {
 
 	class string_storage {
@@ -142,6 +143,7 @@ namespace datatypes {
 		return ptr->data.empty();
 	}
 
+	/*
 	const objectinfo& objectinfo::nil() {
 		static objectinfo result;
 		return result;
@@ -151,6 +153,6 @@ namespace datatypes {
 	{
 		return objectinfo::nil();//   runtime::Runtime::getInfo(*this);
 	}
-
+	*/
 
 }

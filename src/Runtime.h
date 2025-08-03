@@ -20,7 +20,7 @@ namespace runtime {
 	class Runtime;
 
 		
-
+	/*
 
 	class Runtime {
 	public:
@@ -84,4 +84,5 @@ namespace runtime {
 
 		static Runtime rtInstance;
 	};
+	*/
 }

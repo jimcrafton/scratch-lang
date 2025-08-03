@@ -78,6 +78,10 @@ public:
     }
 
     bool nextToken() const {
+        if (curTokIt == tokens.end()) {
+            return false;
+        }
+
         ++curTokIt;
 
         if (curTokIt == tokens.end()) {

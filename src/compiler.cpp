@@ -22,6 +22,9 @@
 #include <thread>
 
 
+#include <unordered_map>
+
+
 
 
 namespace compiler {
@@ -59,6 +62,14 @@ namespace compiler {
 				
 		}
 
+		virtual void visitNamespaceBlock(const parser::NamespaceBlock& node) {
+			if (state == language::AstVisitor::stateVisitStarted) {
+				compiler.stage1NewNamespace(node);
+			}
+			else if (state == language::AstVisitor::stateVisitComplete) {
+					compiler.stage1CloseNamespace(node);
+			}
+		}
 			
 		virtual void visitVariableNode(const parser::VariableNode& node) {
 			if (state == language::AstVisitor::stateVisitStarted) {
@@ -517,7 +528,9 @@ namespace compiler {
 			)
 		);
 		
+
 		
+
 		auto returnType = llvm::FunctionType::get(llvmBuilderPtr->getInt32Ty(), llvmBuilderPtr->getVoidTy(), false);
 		auto mainFunc = mainEntryModulePtr->getFunction(mainFuncName);
 		if (nullptr == mainFunc) {
@@ -618,19 +631,19 @@ namespace compiler {
 				//do stuff
 				for (const auto& v : scope.getVariables()) {
 					const auto& var = v.second;
-					if (var.type.type == compiletime::TypeDescriptor::typeUnknown) {
+					if (var.typeDecl.type == compiletime::TypeDescriptor::typeUnknown) {
 						compiletime::Variable resolvedVar;
 						if (!scope.resolveVariable(var, resolvedVar)) {
 							//std::cout << "var '" << var.name << "', type '" << var.type.name << "' undefined" << std::endl;
 								
 								
 							ErrorItem err;
-							if (resolvedVar.type.getName().empty()) {
+							if (resolvedVar.typeDecl.getName().empty()) {
 								err.message = "No type is specified for this variable ('" + var.getName() + "')";									
 								err.errCode = NO_VARIABLE_TYPE_NAME;
 							}
 							else  {
-								err.message = "No type found for this variable ('" + var.getName() + "') with a type name of '" + var.type.getName() + "'";
+								err.message = "No type found for this variable ('" + var.getName() + "') with a type name of '" + var.typeDecl.getName() + "'";
 								err.errCode = NO_VARIABLE_TYPE_DEFINED;
 							}
 							err.code = var.location();
@@ -639,7 +652,7 @@ namespace compiler {
 						}
 						else {
 
-							std::cout << "able to resolve var '" << resolvedVar.getName() << "', type '" << resolvedVar.type.getName() << "', " << resolvedVar.type.type << std::endl;
+							std::cout << "able to resolve var '" << resolvedVar.getName() << "', type '" << resolvedVar.typeDecl.getName() << "', " << resolvedVar.typeDecl.type << std::endl;
 						}
 					}
 				}
@@ -660,11 +673,105 @@ namespace compiler {
 			
 	}
 
+	
+	void Compiler::buildIntegerAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope)
+	{
+
+	}
+
+	void Compiler::buildRealAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope)
+	{
+
+	}
+		
+	void Compiler::buildAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope)
+	{
 		
 
-	void Compiler::buildFunction(const compiletime::Instance* receiver, const CppString& selector, const std::vector<const compiletime::Instance*>& params , const compiletime::ScopedEnvironment& scope)
+		auto rhsInstance = param;
+
+
+		if (receiver->typeDecl.type == rhsInstance->typeDecl.type) {
+
+			if (isTypeInt(receiver->typeDecl.type)) {
+				buildIntegerAssignment(receiver, param, scope);
+				return;
+			}
+			else if (isTypeRealNumber(receiver->typeDecl.type)) {
+				buildRealAssignment(receiver, param, scope);
+				return;
+			}
+			else {
+				switch (receiver->typeDecl.type) {
+				case compiletime::TypeDescriptor::typeClass:
+				case compiletime::TypeDescriptor::typeRecord: {
+
+
+				} break;
+
+				case compiletime::TypeDescriptor::typeArray: {
+
+
+				} break;
+
+				case compiletime::TypeDescriptor::typeDictionary: {
+
+
+				} break;
+
+				case compiletime::TypeDescriptor::typeString: {
+
+
+				} break;
+				}
+			}			
+		}
+		else {
+			
+		}
+
+		switch (receiver->typeDecl.type) {
+			case compiletime::TypeDescriptor::typeBool : {
+
+			} break;
+
+			case compiletime::TypeDescriptor::typeDouble64: {
+
+			} break;
+
+			case compiletime::TypeDescriptor::typeDouble32: {
+
+			} break;
+
+			case compiletime::TypeDescriptor::typeInteger8: {
+
+			} break;
+
+			case compiletime::TypeDescriptor::typeInteger16: {
+
+			} break;
+
+			case compiletime::TypeDescriptor::typeInteger32: {
+
+			} break;
+
+			case compiletime::TypeDescriptor::typeInteger64: {
+
+			} break;
+
+			case compiletime::TypeDescriptor::typeInteger128: {
+
+			} break;
+
+			default: {
+
+			} break;
+		}
+	}
+
+	void Compiler::buildFunction(const compiletime::Instance* receiver, const compiletime::MessageSelector& selector, const std::vector<const compiletime::Instance*>& params , const compiletime::ScopedEnvironment& scope)
 	{
-		auto fullyQualifiedSelector = selector;
+		auto fullyQualifiedSelector = selector.name;
 		bool first = true;
 		for (const auto& p : params) {
 			if (!first) {
@@ -672,6 +779,24 @@ namespace compiler {
 				first = false;
 			}
 			fullyQualifiedSelector += p->getName();
+		}
+
+		switch (selector.type) {
+			case compiletime::Message::msgTypeAsignmentOperator: {
+				if (params.empty()) {
+					throw Compiler::Error(*this, "Attempting to assign to a variable instance with no RHS value");
+				}
+
+				if (params.size() != 1) {
+					throw Compiler::Error(*this, "Attempting to assign more than one variable to a variable instance");
+				}
+
+				buildAssignment(receiver, params[0], scope);
+			} break;
+
+			default: {
+
+			} break;
 		}
 
 	//	scope.module->llvmModulePtr
@@ -682,12 +807,14 @@ namespace compiler {
 
 	void Compiler::buildFunction(const compiletime::Instance* receiver, const compiletime::Message& msg, const compiletime::ScopedEnvironment& scope)
 	{
-		auto selector = msg.getName();
+		auto selector = compiletime::MessageSelector(msg);
 
 		std::vector<const compiletime::Instance*> params;
 
 		for (const auto& p:msg.parameters) {
-			params.push_back(p.second.param);
+			const auto& paramInst = scope.getInstance(p.second.getName());
+
+			params.push_back(&paramInst);
 		}
 
 		buildFunction(receiver, selector, params, scope);
@@ -713,12 +840,15 @@ namespace compiler {
 	void Compiler::stage3()
 	{
 			
+		std::function<void(compiletime::ScopedEnvironment& scope)> buildCode;
+		buildCode = ([&buildCode, this](compiletime::ScopedEnvironment& scope) -> void {
 
-		std::function<void(compiletime::ScopedEnvironment& scope)> func;
-		func = ([&func, this](compiletime::ScopedEnvironment& scope) -> void {
+			auto module = scope.module;
+
+
 			for (auto revIt = scope.children.rbegin(); revIt != scope.children.rend(); ++revIt) {
 				auto s = *revIt;
-				func(*s);
+				buildCode(*s);
 			}
 
 			llvm::Value* val = nullptr;
@@ -728,16 +858,35 @@ namespace compiler {
 			}
 			for (const auto& v : scope.getVariables()) {
 				const compiletime::Variable& var = v.second;
-				auto varName = var.getName();
-				switch (var.type.type) {
-					case compiletime::TypeDescriptor::typeInteger8 : {
-							
-						//val = llvmBuilderPtr->getInt8(0);
-					}break;
+				auto varName = var.getFullyQualifiedName();
 
-					default: {
+				bool globalVar = nullptr == scope.parent;
+				if (nullptr != scope.parent) {
 
-					}break;
+					globalVar = (nullptr == scope.parent->parent) && (scope.isGlobal());
+				}
+
+				if (!globalVar) {
+					//one more check
+					if (nullptr == scope.scopedElement) {
+						globalVar = true;
+					}
+					else {
+						if (scope.scopedElement->scopeConsideredGlobal()) {
+							globalVar = true;
+						}
+					}
+				}
+
+				if (globalVar) {
+					llvm::Type* globalVarType = var.typeDecl.getType(this->llvmBuilderPtr.get());
+					module->llvmModulePtr->getOrInsertGlobal(varName, globalVarType);
+
+					llvm::GlobalVariable* globalVar = module->llvmModulePtr->getNamedGlobal(varName);
+				}
+				else {
+					//stack or register vars???
+
 				}
 			}
 
@@ -747,13 +896,32 @@ namespace compiler {
 
 		if (nullptr != executableCodePtr) {
 			for (auto m : executableCodePtr->modules) {
-				m.second->resetScope();
-				func(*m.second->globalScope());
+				auto& module = *m.second;
+
+				module.resetScope();
+				buildCode(*module.globalScope());
 			}
 		}
 		else {
 
 		}
+	}
+
+	void Compiler::stage1NewNamespace(const parser::NamespaceBlock& node)
+	{
+		
+		auto ns = currentModule->createNewNamespace(node.name);
+		ns->setLocation(node.token.location);
+
+		ns->blockScope = currentModule->pushNewScope(ns->getName(), ns);
+
+	}
+
+	void Compiler::stage1CloseNamespace(const parser::NamespaceBlock& node)
+	{
+		currentModule->closeCurrentScope();
+
+		currentModule->popCurrentNamespace();
 	}
 
 	void Compiler::stage1NewModule(const parser::ModuleBlock& node)
@@ -793,9 +961,14 @@ namespace compiler {
 			throw Compiler::Error(*this, "Type already exists");
 		}
 
-		currentModule->pushNewScope();
 
-		currentModule->getCurrentScope()->name = node.name;
+		compiletime::ClassBlock newClass;
+		newClass.setName(node.name);
+		auto* currentNs = currentModule->getCurrentNamespace();
+		auto res = currentNs->code.classDefs.insert(std::make_pair(newClass.getName(), newClass));
+		auto& cls = res.first->second;
+		
+		cls.blockScope = currentModule->pushNewScope(cls.getName(), &cls);
 	}
 
 	void Compiler::stage1CloseClassBlock(const parser::ClassBlock& node)
@@ -807,7 +980,11 @@ namespace compiler {
 
 	void Compiler::stage1NewMessageBlock(const parser::MessageBlock& node)
 	{
-		currentModule->pushNewScope();
+
+		//auto* currentNs = currentModule->getCurrentNamespace();
+		//currentNs->code.
+
+		currentModule->pushNewScope("", nullptr);
 		currentModule->getCurrentScope()->name = node.msgDecl->msgIsClosure ? "_closure_" : node.msgDecl->name;
 	}
 
@@ -832,6 +1009,22 @@ namespace compiler {
 		//std::cout << "stage1NewSendMessage " << node.message->name << std::endl;
 		compiletime::SendMessage newSendMsg;
 		newSendMsg.msg.setName(node.message->name);
+		if (node.message->token.isMathOperator()) {
+			newSendMsg.msg.type = compiletime::Message::msgTypeMathOperator;
+		}
+		else if (node.message->token.type == lexer::Token::ASSIGMENT_OPERATOR) {
+			newSendMsg.msg.type = compiletime::Message::msgTypeAsignmentOperator;
+		}
+		else if (node.message->token.type == lexer::Token::EQUALS_SIGN) {
+			newSendMsg.msg.type = compiletime::Message::msgTypeCompareEquals;
+		}
+		else if (node.message->name == "<" || node.message->name == ">") {
+			newSendMsg.msg.type = compiletime::Message::msgTypeComparison;
+		}
+		else {
+			newSendMsg.msg.type = compiletime::Message::msgTypeNamed;
+		}
+		
 		newSendMsg.setLocation(node.token.location);
 
 		std::string instName = node.instance->name;
@@ -842,14 +1035,35 @@ namespace compiler {
 			newSendMsg.instance = &currentModule->getCurrentScope()->getInstance(node.instance->name);
 		}
 		else {
+			compiletime::TypeDecl instanceType;
+
+			if (currentModule->getCurrentScope()->hasVariable(instName)) {
+				 const auto& var = currentModule->getCurrentScope()->getVariable(instName);
+				 instanceType = var.typeDecl;
+			}
+
+
 			compiletime::Instance newInst;
 			newInst.setName(instName);
 			newInst.setLocation(node.token.location);
+			newInst.typeDecl = instanceType;
 			currentModule->getCurrentScope()->addInstance(newInst);
 			newSendMsg.instance = &currentModule->getCurrentScope()->getInstance(instName);
 		}
 			
 		for (auto p : node.message->parameters) {
+			compiletime::MessageParameter param;
+
+			std::string name = generateTempInstanceName(p->param);
+			std::cout << "stage1NewSendMessage param inst: " << name << std::endl;
+			param.setName(name);
+			
+			auto res = newSendMsg.msg.parameters.insert(std::make_pair(param.getName(), param));
+			auto& msgParam =  res.first->second;
+			//msgParam.setScope(currentModule->getCurrentScope());
+			msgParam.setNamespace(currentModule->getCurrentNamespace());
+
+			//msgParam.param = &currentModule->getCurrentScope()->getInstance(msgParam.getName());
 
 		}
 		currentModule->getCurrentScope()->addSendMessage(newSendMsg);
@@ -901,10 +1115,10 @@ namespace compiler {
 			newVar.setName(p->name);
 			newVar.setLocation(p->token.location);
 			if (!p->type.empty()) {
-				newVar.type = currentModule->getCurrentScope()->getType(p->type, true);
+				newVar.typeDecl = currentModule->getCurrentScope()->getType(p->type, true);
 			}
-			if (compiletime::TypeDescriptor::typeUnknown == newVar.type.type) {
-				newVar.type.setName(p->type);
+			if (compiletime::TypeDescriptor::typeUnknown == newVar.typeDecl.type) {
+				newVar.typeDecl.setName(p->type);
 			}
 			if (!currentModule->getCurrentScope()->addVariable(newVar)) {
 				throw Compiler::Error(*this, "Variable already exists");
@@ -946,10 +1160,10 @@ namespace compiler {
 				printf("ERROR! No type (%s) found!\n", node.type.c_str());
 			}
 
-			newVar.type = currentModule->getCurrentScope()->getType(node.type, true);
+			newVar.typeDecl = currentModule->getCurrentScope()->getType(node.type, true);
 		}
-		if (compiletime::TypeDescriptor::typeUnknown == newVar.type.type) {
-			newVar.type.setName(node.type);
+		if (compiletime::TypeDescriptor::typeUnknown == newVar.typeDecl.type) {
+			newVar.typeDecl.setName(node.type);
 		}
 		
 		if (!currentModule->getCurrentScope()->addVariable(newVar)) {
@@ -972,7 +1186,7 @@ namespace compiler {
 					
 				compiletime::Instance newInst;
 				newInst.setName(name);
-				newInst.type = currentModule->getCurrentScope()->getType("string", true);
+				newInst.typeDecl = currentModule->getCurrentScope()->getType("string", true);
 				newInst.setLocation(node.token.location);
 					
 				newInst.value.stringPtr = &currentModule->getCurrentScope()->getStringLiteral(name);
@@ -991,7 +1205,7 @@ namespace compiler {
 
 				compiletime::Instance newInst;
 				newInst.setName( name);
-				newInst.type = p.type;
+				newInst.typeDecl = p.type;
 				newInst.setLocation(node.token.location);
 					
 				newInst.value.primitivePtr = &currentModule->getCurrentScope()->getPrimLiteral(name);
@@ -1018,7 +1232,7 @@ namespace compiler {
 		compiletime::Instance newInst;
 		newInst.setName(node.name);
 		newInst.setLocation(node.token.location);
-		newInst.type = globalEnv->getType("message", false);
+		newInst.typeDecl = globalEnv->getType("message", false);
 		currentModule->getCurrentScope()->addInstance(newInst);
 	}
 
@@ -1032,17 +1246,17 @@ namespace compiler {
 		newInst.setLocation(node.token.location);
 		bool newVarNeeded = true;
 		if (!node.type.empty()) {
-			newInst.type = currentModule->getCurrentScope()->getType(node.type, true);
+			newInst.typeDecl = currentModule->getCurrentScope()->getType(node.type, true);
 		}
 		else {
 			auto v = currentModule->getCurrentScope()->getVariable(node.name,true);
 			if (!v.empty()) {
-				newInst.type = v.type;
+				newInst.typeDecl = v.typeDecl;
 				newVarNeeded = false;
 			}
 		}
-		if (compiletime::TypeDescriptor::typeUnknown == newInst.type.type) {
-			newInst.type.setName(node.type);
+		if (compiletime::TypeDescriptor::typeUnknown == newInst.typeDecl.type) {
+			newInst.typeDecl.setName(node.type);
 		}
 			
 		currentModule->getCurrentScope()->addInstance(newInst);
@@ -1050,7 +1264,7 @@ namespace compiler {
 		if (!currentModule->getCurrentScope()->hasVariable(newInst.getName()) && newVarNeeded) {
 			compiletime::Variable newVar;
 			newVar.setName(newInst.getName());
-			newVar.type = newInst.type;
+			newVar.typeDecl = newInst.typeDecl;
 			newVar.setLocation(node.token.location);
 
 			
@@ -1254,8 +1468,13 @@ namespace compiler {
 	void Linker::link(const Compiler& compiler)
 	{
 		//run llvm linker
-		std::string link_command = "/verbose /subsystem:CONSOLE /nodefaultlib /entry:" + Compiler::mainEntryFunction() + " ";
-			
+		std::string link_command;
+
+		//if (options.debugMode) {
+			link_command += "/verbose ";
+		//}
+
+		link_command += "/subsystem:CONSOLE /nodefaultlib /entry:" + Compiler::mainEntryFunction() + " ";			
 
 
 		if (outputFileName.find(".exe")==std::string::npos) {
@@ -1268,8 +1487,13 @@ namespace compiler {
 
 		link_command += "/out:" + outputFileName + " ";
 
-
-		objs.push_back("scratch-lang-runtime/x64/Debug/scratch_runtime.obj");
+#ifdef SCRATCH_RUNTIME_DEBUG
+		objs.push_back("scratch-lang-runtime/objs/scratch_runtime_x64_Debug.obj");
+		objs.push_back("scratch-lang-runtime/objs/rt_lang_memcpy_x64_Debug.obj");
+#else 
+		objs.push_back("scratch-lang-runtime/objs/scratch_runtime_x64_Release.obj");
+		objs.push_back("scratch-lang-runtime/objs/rt_lang_memcpy_x64_Release.obj");
+#endif
 
 		for (auto obj : objs) {
 			link_command += obj + " ";
@@ -1277,14 +1501,15 @@ namespace compiler {
 
 
 			
-		std::vector<std::string> win32CRTLibs = { "kernel32.lib", "user32.lib", "Shell32.lib"};// , "ucrt.lib", "msvcrt.lib", "vcruntime.lib"
+		std::vector<std::string> win32CRTLibs = { "kernel32.lib", "user32.lib", "Shell32.lib"};
 	
 		for (auto lib : win32CRTLibs) {
 			link_command += lib + " ";
 		}
 
-
-		Compiler::println( "command: lld-link " + link_command );
+		if (options.debugMode) {
+			Compiler::println( "command: lld-link " + link_command );
+		}
 
 		{
 			utils::process process(

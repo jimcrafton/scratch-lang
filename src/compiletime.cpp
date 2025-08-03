@@ -48,6 +48,72 @@ namespace compiletime {
 	}
 	*/
 
+
+	CppString CodeElement::getFullyQualifiedName() const
+	{
+		CppString result = name;
+		
+		auto ns = getNamespace();
+		while (ns != nullptr) {
+			if (!ns->getName().empty()) {
+				result = ns->getName() + Namespace::Separator + result;
+			}
+
+			ns = ns->parent;
+		}
+
+		return result;
+	}
+
+	llvm::Type* TypeDecl::getType(::llvm::IRBuilder<>* builder) const
+	{
+		llvm::Type* result = nullptr;
+		switch (type) {
+			case compiletime::TypeDescriptor::typeBool: {
+				result = builder->getInt1Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger8: 
+			case compiletime::TypeDescriptor::typeUInteger8: {
+				result = builder->getInt8Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger16: 
+			case compiletime::TypeDescriptor::typeUInteger16: {
+				result = builder->getInt16Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger32:
+			case compiletime::TypeDescriptor::typeUInteger32: {
+				result = builder->getInt32Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger64:
+			case compiletime::TypeDescriptor::typeUInteger64: {
+				result = builder->getInt64Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger128:
+			case compiletime::TypeDescriptor::typeUInteger128: {
+				result = builder->getInt128Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeDouble32: {
+				result = builder->getFloatTy();
+			}break;
+
+			case compiletime::TypeDescriptor::typeDouble64: {
+				result = builder->getDoubleTy();
+			}break;
+
+			default: {
+				result = nullptr;
+			}break;
+		}
+
+		return result;
+	}
+
 	Module::Module(compiler::Compiler& c):
 		compiler(c)
 	{
@@ -65,17 +131,29 @@ namespace compiletime {
 
 		llvmModulePtr.reset(c.createModule(name));
 
-		globalEnv = new ScopedEnvironment(c);
-		globalEnv->name = "module scope " + name;
+		
 
-		c.getGlobalScope()->add(globalEnv);
+		createGlobalScope(c);
+
+		currentNamespace = &globalNamespace;
 	}
 
+	void Module::createGlobalScope(compiler::Compiler& c)
+	{
+		globalEnv = new ScopedEnvironment(c);
+		globalEnv->name = "module scope " + name;
+		globalEnv->module = this;
+		globalEnv->scopedElement = this;
+
+		c.getGlobalScope()->add(globalEnv);
+
+		resetScope();
+	}
 
 	void Module::resetScope()
 	{
 		if (nullptr == globalEnv) {
-			globalEnv = new ScopedEnvironment(compiler);
+			throw std::runtime_error("No global env!");
 		}
 		currentScope = globalEnv;
 	}
@@ -93,6 +171,35 @@ namespace compiletime {
 			closeScope(*scopePtr);
 		}
 	}
+
+
+	void Module::closeCurrentNamespace()
+	{
+		popCurrentNamespace();
+	}
+
+	NamespaceBlock* Module::popCurrentNamespace()
+	{
+		currentNamespace = currentNamespace->parent;
+		if (nullptr == currentNamespace) {
+			currentNamespace = &globalNamespace;
+		}
+
+		return currentNamespace;
+	}
+
+	NamespaceBlock* Module::createNewNamespace(const CppString& name)
+	{
+		NamespaceBlock newNamespace;
+		newNamespace.setName(name);
+		auto res = currentNamespace->namespaces.insert(std::make_pair(name, newNamespace));
+		auto& ns = res.first->second;
+		ns.parent = currentNamespace;
+		currentNamespace = &ns;
+
+		return currentNamespace;
+	}
+
 
 	void ExecutableFragment::init(const CppString& n, compiler::Compiler& c)
 	{
@@ -121,14 +228,17 @@ namespace compiletime {
 		return result;
 	}
 
-	ScopedEnvironment* Module::createNewScope() {
+	ScopedEnvironment* Module::createNewScope(const CppString& name, CodeElement* scopeElement) {
 		ScopedEnvironment* result = new ScopedEnvironment(compiler);
+		result->module = this;
+		result->scopedElement = scopeElement;
+		result->name = name;
 		currentScope->add(result);
 		return result;
 	}
 
-	ScopedEnvironment* Module::pushNewScope() {
-		ScopedEnvironment* newScope = createNewScope();
+	ScopedEnvironment* Module::pushNewScope(const CppString& name, CodeElement* scopeElement) {
+		ScopedEnvironment* newScope = createNewScope(name,scopeElement);
 		currentScope = newScope;
 		return currentScope;
 	}
@@ -201,12 +311,12 @@ namespace compiletime {
 		std::cout << line << std::endl;
 		std::cout << tab << "\tinstances" << std::endl;
 		for (const auto& i : getInstances()) {
-			std::cout << tab << "\t" << i.second.getName() << " " << i.second.type.type << std::endl;
+			std::cout << tab << "\t" << i.second.getName() << " " << i.second.typeDecl.type << std::endl;
 		}
 		std::cout << line << std::endl;
 		std::cout << tab << "\tvariables" << std::endl;
 		for (const auto& v : getVariables()) {
-			std::cout << tab << "\t" << v.second.getName() << " '" << v.second.type.fullyQualifiedName() << "' : " << v.second.type.type << std::endl;
+			std::cout << tab << "\t" << v.second.getName() << " '" << v.second.typeDecl.fullyQualifiedName() << "' : " << v.second.typeDecl.type << std::endl;
 		}
 		std::cout << line << std::endl;
 		std::cout << tab << "\tsend messages" << std::endl;
@@ -233,10 +343,11 @@ namespace compiletime {
 			return false;
 		}
 
-		printf("'%s' : '%s'\n", v.getName().c_str(), v.type.getName().c_str());
+		printf("'%s' : '%s'\n", v.getName().c_str(), v.typeDecl.getName().c_str());
 
 		auto res = variables.insert(std::make_pair(v.getName(), v));
 		res.first->second.setScope(this);
+		res.first->second.setNamespace(this->module->getCurrentNamespace());
 
 		return true;
 	}
@@ -273,14 +384,14 @@ namespace compiletime {
 	bool ScopedEnvironment::resolveVariable(const Variable& var, Variable& outVar)
 	{
 		Variable* foundVar = nullptr;
-		if (var.type.type != compiletime::TypeDescriptor::typeUnknown) {
+		if (var.typeDecl.type != compiletime::TypeDescriptor::typeUnknown) {
 			return true;
 		}
 
-		auto res = hasType(var.type.getName(), true);
-		printf("%s (%s) has type %d\n", var.getName().c_str(), var.type.getName().c_str(), (int)res);
+		auto res = hasType(var.typeDecl.getName(), true);
+		printf("%s (%s) has type %d\n", var.getName().c_str(), var.typeDecl.getName().c_str(), (int)res);
 		if (res) {
-			auto t = getType(var.type.getName(), true);
+			auto t = getType(var.typeDecl.getName(), true);
 			auto p = this;
 			while (nullptr != p) {
 				auto found = p->variables.find(var.getName());
@@ -292,7 +403,7 @@ namespace compiletime {
 			}
 
 			if (nullptr != foundVar) {
-				foundVar->type = t;
+				foundVar->typeDecl = t;
 				outVar = *foundVar;
 			}
 		}

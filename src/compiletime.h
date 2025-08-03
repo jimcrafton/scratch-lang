@@ -15,7 +15,7 @@
 
 
 #include "llvm/IR/Module.h"
-
+#include "llvm/IR/IRBuilder.h"
 
 /*
 namespace parser {
@@ -88,6 +88,7 @@ namespace compiletime {
 	typedef std::map<CppString, Flag> Flags;
 	class ScopedEnvironment;
 	class Namespace;
+	class NamespaceBlock;
 	class TypeDecl;
 	class Variable;
 	class Instance;
@@ -134,8 +135,14 @@ namespace compiletime {
 		inline void setScope(const ScopedEnvironment* v) { scope = v; }
 		inline const ScopedEnvironment* getScope() const { return scope; }
 
+		const NamespaceBlock* getNamespace() const { return namspaceBlk; }
+		void setNamespace(const NamespaceBlock* v) { namspaceBlk = v; }
 
 		virtual void accept(CodeVisitor& v) const {}
+
+		CppString getFullyQualifiedName() const;
+
+		virtual bool scopeConsideredGlobal() const { return false; }
 	protected:
 		Flags flags;
 		CppString name;
@@ -143,6 +150,7 @@ namespace compiletime {
 
 		lexer::CodeLocation code;
 		const ScopedEnvironment* scope = nullptr;
+		const NamespaceBlock* namspaceBlk = nullptr;
 	};
 
 
@@ -193,6 +201,8 @@ namespace compiletime {
 		virtual void accept(CodeVisitor& v) const {
 			v.visitNamespace(*this);
 		}
+
+		virtual bool scopeConsideredGlobal() const { return true; }
 	private:
 
 	};
@@ -232,6 +242,10 @@ namespace compiletime {
 		virtual void accept(CodeVisitor& v) const {
 			v.visitType(*this);
 		}
+
+		llvm::Type* getType(::llvm::IRBuilder<> *builder ) const;
+
+		virtual bool scopeConsideredGlobal() const { return true; }
 	};
 
 
@@ -261,6 +275,9 @@ namespace compiletime {
 
 		Data data;
 		TypeDecl type;
+
+
+		virtual bool scopeConsideredGlobal() const { return true; }
 	};
 
 
@@ -268,12 +285,15 @@ namespace compiletime {
 
 	class Variable : public CodeElement {
 	public:
-		TypeDecl type;
+		TypeDecl typeDecl;
+
+		Namespace varNamespace;
+
 
 		virtual ~Variable() {}
 
 		bool empty() const {
-			return flags.empty() && name.empty() && type.type == compiletime::TypeDescriptor::typeUnknown && scope == nullptr;
+			return flags.empty() && name.empty() && typeDecl.type == compiletime::TypeDescriptor::typeUnknown && scope == nullptr;
 		}
 		static const Variable& null() {
 			static Variable res;
@@ -288,13 +308,15 @@ namespace compiletime {
 	class Instance : public CodeElement {
 	public:
 
+		
+
 		union Value {
 			const datatypes::object* objPtr;
 			const datatypes::string* stringPtr;
-			const Primitive* primitivePtr;
+			const Primitive* primitivePtr = nullptr;
 		};
 
-		TypeDecl type;
+		TypeDecl typeDecl;
 		Value value;
 
 		virtual void accept(CodeVisitor& v) const {
@@ -307,7 +329,7 @@ namespace compiletime {
 
 	class MessageParameter : public CodeElement {
 	public:
-		Instance* param = nullptr;
+		const Instance* param = nullptr;
 
 		Instance defValue;
 	};
@@ -318,11 +340,32 @@ namespace compiletime {
 
 		virtual ~Message() {}
 
+		enum Type {
+			msgTypeUnknown = 0,
+			msgTypeMathOperator   = 1,
+			msgTypeAsignmentOperator = 2,
+			msgTypeCompareEquals,
+			msgTypeComparison,
+			msgTypeNamed
+		};
+
+		Type type;
+
 		std::unordered_map<CppString, MessageParameter> parameters;
 
 		virtual void accept(CodeVisitor& v) const {
 			v.visitMessage(*this);
 		}
+	};
+
+
+	class MessageSelector {
+	public:
+		MessageSelector() {}
+		MessageSelector(const Message& m) :name(m.getName()), type(m.type){}
+
+		CppString name;
+		Message::Type type;
 	};
 
 
@@ -339,11 +382,15 @@ namespace compiletime {
 		virtual void accept(CodeVisitor& v) const {
 			v.visitSendMessage(*this);
 		}
+
+		MessageSelector getSelector() const {
+			return MessageSelector(msg);
+		}
 	};
 
 	class Block : public CodeElement {
 	public:
-
+		ScopedEnvironment* blockScope = nullptr;
 	};
 
 	class VariablesBlock : public Block {
@@ -399,11 +446,18 @@ namespace compiletime {
 	class NamespaceBlock : public Block {
 	public:
 
-		CppString parent;
+		NamespaceBlock* parent;
 
+		
 
 
 		CodeFragmentBlock code;
+
+		ScopedEnvironment* scope;
+
+		std::unordered_map<CppString, NamespaceBlock> namespaces;
+
+		virtual bool scopeConsideredGlobal() const { return true; }
 	};
 
 	class ThreadBlock : public Block {
@@ -433,8 +487,6 @@ namespace compiletime {
 		//void output(compiler::Compiler& c, OutputFormat outFmt, std::string& outputFileName);
 
 		const std::map<CppString, Import>& getImports() const { return imports; }
-		const std::map<CppString, NamespaceBlock>& getNamespaces() const { return namespaces; }
-
 
 		const ScopedEnvironment* globalScope() const { return globalEnv; }
 		ScopedEnvironment* globalScope() { return globalEnv; }
@@ -447,15 +499,28 @@ namespace compiletime {
 		void closeScope(const ScopedEnvironment& scope);
 		void closeCurrentScope();
 		ScopedEnvironment* popCurrentScope();
-		ScopedEnvironment* createNewScope();
-		ScopedEnvironment* pushNewScope();
+		ScopedEnvironment* createNewScope(const CppString& name, CodeElement* scopeElement);
+		ScopedEnvironment* pushNewScope(const CppString& name, CodeElement* scopeElement);
+
+		void createGlobalScope(compiler::Compiler& c);
+
+
+		const NamespaceBlock* getCurrentNamespace() const { return currentNamespace; }
+		NamespaceBlock* getCurrentNamespace() { return currentNamespace; }
+		void closeCurrentNamespace();
+		NamespaceBlock* popCurrentNamespace();
+		NamespaceBlock* createNewNamespace(const CppString& name);
+
+		virtual bool scopeConsideredGlobal() const { return true; }
 	private:
 		ScopedEnvironment* globalEnv = nullptr;
 		ScopedEnvironment* currentScope = nullptr;
+
 		compiler::Compiler& compiler;
 
 		std::map<CppString, Import> imports;
-		std::map<CppString, NamespaceBlock> namespaces;
+		NamespaceBlock globalNamespace;
+		NamespaceBlock* currentNamespace;
 	};
 
 
@@ -507,8 +572,7 @@ namespace compiletime {
 	public:
 
 
-		std::map<CppString, Message > message;
-
+		std::unordered_map<CppString, MessageSelector > message;
 	};
 
 
@@ -533,6 +597,7 @@ namespace compiletime {
 
 		Module* module = nullptr;
 
+		CodeElement* scopedElement = nullptr;
 
 		void add(ScopedEnvironment* scope) {
 			scope->parent = this;
@@ -663,6 +728,10 @@ namespace compiletime {
 
 		const Instance* getSelf() const { return selfPtr; }
 		void setSelf(const Instance* v) { selfPtr = v; }
+
+		bool isGlobal() const {
+			return module == scopedElement;
+		}
 	private:
 
 		//this should be the object instance that the scope is part of 

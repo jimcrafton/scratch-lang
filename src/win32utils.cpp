@@ -57,11 +57,9 @@ namespace utils {
 		std::string commandLine_;
 		HANDLE readThread_;
 
-		HANDLE	childStdinRdHandle_;
-		HANDLE	childStdinWrHandle_;
+		
 		HANDLE	childStdoutRdHandle_;
-		HANDLE	childStdoutWrHandle_;
-		HANDLE	savedStdinHandle_;
+		HANDLE	childStdoutWrHandle_;		
 		HANDLE	savedStdoutHandle_;
 		PROCESS_INFORMATION processInfo_;
 
@@ -83,12 +81,9 @@ namespace utils {
 		processID_(0),
 		processThreadID_(0),
 		readThreadID_(0),
-		readThread_(NULL),
-		childStdinRdHandle_(NULL),
-		childStdinWrHandle_(NULL),
+		readThread_(NULL),		
 		childStdoutRdHandle_(NULL),
-		childStdoutWrHandle_(NULL),
-		savedStdinHandle_(NULL),
+		childStdoutWrHandle_(NULL),		
 		savedStdoutHandle_(NULL),
 		startInfoPtr_(NULL),
 		canContinueReading_(false)
@@ -219,17 +214,12 @@ namespace utils {
 			outputCallback_(outputData);
 		}
 
-		if (!CloseHandle(childStdinRdHandle_)) {
-			throw std::runtime_error("CloseHandle(pThis->hChildStdinRd_)");
-		}
+		
 		if (!CloseHandle(childStdoutWrHandle_)) {
 			throw std::runtime_error("CloseHandle(pThis->childStdoutWrHandle_)");
 		}
 
-		if (!CloseHandle(childStdinWrHandle_)) {
-			throw std::runtime_error("CloseHandle(pThis->hChildStdinWr_)");
-		}
-
+		
 		if (!CloseHandle(childStdoutRdHandle_)) {
 			throw std::runtime_error("CloseHandle(pThis->childStdoutRdHandle_)");
 		}
@@ -257,15 +247,11 @@ namespace utils {
 			::WaitForSingleObject(readThread_, INFINITE);
 			::CloseHandle(readThread_);
 
-			if (!::CloseHandle(childStdinRdHandle_)) {
-				throw std::runtime_error("CloseHandle(childStdinRdHandle_) failed");
-			}
+			
 			if (!::CloseHandle(childStdoutWrHandle_)) {
 				throw std::runtime_error("CloseHandle(childStdoutWrHandle_) failed");
 			}
-			if (!::CloseHandle(childStdinWrHandle_)) {
-				throw std::runtime_error("CloseHandle(childStdinWrHandle_) failed");
-			}
+			
 			if (!::CloseHandle(childStdoutRdHandle_)) {
 				throw std::runtime_error("CloseHandle(childStdoutRdHandle_) failed");
 			}
@@ -273,7 +259,7 @@ namespace utils {
 			readThread_ = NULL;
 		}
 
-		HANDLE hChildStdoutRdTmp, hChildStdinWrTmp;
+		HANDLE hChildStdoutRdTmp;
 		SECURITY_ATTRIBUTES saAttr;
 		memset(&saAttr, 0, sizeof(saAttr));
 		BOOL bSuccess;
@@ -317,40 +303,7 @@ namespace utils {
 			throw std::runtime_error("CloseHandle(hChildStdoutRdTmp)");
 		}
 
-		// The steps for redirecting child process's STDIN:
-		//	 1.  Save current STDIN, to be restored later.
-		//	 2.  Create anonymous pipe to be STDIN for child process.
-		//	 3.  Set STDIN of the parent to be the read handle to the
-		//		 pipe, so it is inherited by the child process.
-		//	 4.  Create a noninheritable duplicate of the write handle,
-		//		 and close the inheritable write handle.
-
-		// Save the handle to the current STDIN.
-		savedStdinHandle_ = GetStdHandle(STD_INPUT_HANDLE);
-
-		// Create a pipe for the child process's STDIN.
-		if (!::CreatePipe(&childStdinRdHandle_, &hChildStdinWrTmp, &saAttr, 0)) {
-			throw std::runtime_error("Stdin pipe creation failed");
-		}
-
-		// Set a read handle to the pipe to be STDIN.
-		if (!::SetStdHandle(STD_INPUT_HANDLE, childStdinRdHandle_)) {
-			throw std::runtime_error("Redirecting Stdin failed");
-		}
-
-		// Duplicate the write handle to the pipe so it is not inherited.
-		bSuccess = ::DuplicateHandle(::GetCurrentProcess(), hChildStdinWrTmp,
-			::GetCurrentProcess(), &childStdinWrHandle_,
-			0, FALSE,// not inherited
-			DUPLICATE_SAME_ACCESS);
-		if (!bSuccess) {
-			throw std::runtime_error("DuplicateHandle failed");
-		}
-
-		if (!::CloseHandle(hChildStdinWrTmp)) {
-			throw std::runtime_error("CloseHandle(hChildStdinWrTmp)");
-		}
-
+		
 
 		//now start the child process - this will start a new cmd with the
 		//the cmd line sent to it
@@ -375,7 +328,7 @@ namespace utils {
 			
 			((STARTUPINFOA*)startInfoPtr_)->dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
 			((STARTUPINFOA*)startInfoPtr_)->wShowWindow = SW_HIDE;
-			((STARTUPINFOA*)startInfoPtr_)->hStdInput = childStdinRdHandle_;
+			
 			((STARTUPINFOA*)startInfoPtr_)->hStdOutput = childStdoutWrHandle_;
 			((STARTUPINFOA*)startInfoPtr_)->hStdError = childStdoutWrHandle_;
 
@@ -438,12 +391,7 @@ namespace utils {
 
 
 			// After process creation, restore the saved STDIN and STDOUT.
-			if (!SetStdHandle(STD_INPUT_HANDLE, savedStdinHandle_)) {
-				delete[] cmdLineBuf;
-				throw std::runtime_error("Re-redirecting Stdin failed");
-			}
-				
-
+			
 			if (!SetStdHandle(STD_OUTPUT_HANDLE, savedStdoutHandle_)) {
 				delete[] cmdLineBuf;
 				throw std::runtime_error("Re-redirecting Stdout failed");
