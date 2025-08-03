@@ -14,7 +14,7 @@ protected:
     const CharT* strPtr;    
     size_t len;
 public:    
-    typedef chT CharT;
+    
     typedef std::char_traits<CharT> char_traits;
     typedef std::basic_string<CharT> StringT;
     typedef typename StringT::const_iterator  const_iterator;
