@@ -26,6 +26,7 @@ namespace parser {
 	class StatementBlock;
 	class ScopeNode;
 	class StatementsBlock;
+	class ExtendsBlock;
 	class ClassBlock;
 	class RecordBlock;
 	class NamespaceBlock;
@@ -34,7 +35,7 @@ namespace parser {
 	class MessageDeclaration;
 	class MessageBlock;
 	class MessageParam;
-	class MsgInstanceNode;
+	class MsgInstanceNode;	
 }
 
 
@@ -49,15 +50,19 @@ namespace language {
 		virtual ~CompileFlags() {}
 
 
-		::std::vector<::std::string> flags;
+		::std::vector< std::pair<std::string, std::string> > flags;
 
 		virtual ::std::string printInfo() const {
 			::std::string result = "flags: ";
 			for (auto f : flags) {
-				result += f + " ";
+				result += f.first + " ";
 			}
 			return result;
 		};
+
+		void clear() {
+			flags.clear();
+		}
 	};
 
 
@@ -177,6 +182,7 @@ namespace language {
 		virtual void visitStatementBlock(const parser::StatementBlock& node) {}
 		virtual void visitScopeNode(const parser::ScopeNode& node) {}
 		virtual void visitStatementsBlock(const parser::StatementsBlock& node) {}
+		virtual void visitExtendsBlock(const parser::ExtendsBlock& node) {}
 		virtual void visitClassBlock(const parser::ClassBlock& node) {}
 		virtual void visitRecordBlock(const parser::RecordBlock& node) {}
 		virtual void visitNamespaceBlock(const parser::NamespaceBlock& node) {}
@@ -184,7 +190,7 @@ namespace language {
 		virtual void visitModuleBlock(const parser::ModuleBlock& node) {}
 		virtual void visitMessageDecl(const parser::MessageDeclaration& node) {}
 		virtual void visitMessageBlock(const parser::MessageBlock& node) {}
-		virtual void visitMsgInstanceNode(const parser::MsgInstanceNode& node) {}
+		virtual void visitMsgInstanceNode(const parser::MsgInstanceNode& node) {}	
 		
 	};
 

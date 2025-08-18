@@ -214,11 +214,16 @@ namespace compiler {
 
 		void stage1NewClass(const parser::ClassBlock& node);
 		void stage1CloseClassBlock(const parser::ClassBlock& node);
+
+		void stage1NewExtendsBlock(const parser::ExtendsBlock& node);
+		void stage1CloseExtendsBlock(const parser::ExtendsBlock& node);
+		
 			
 		void stage1NewMessageBlock(const parser::MessageBlock& node);
 		void stage1CloseMessageBlock(const parser::MessageBlock& node);
 		void stage1NewMessageDecl(const parser::MessageDeclaration& node);
 		void stage1NewSendMessage(const parser::SendMessage& node);
+		void stage1NewReturnExpr(const parser::ReturnExpression& node);
 		void stage1NewAssignmentMessage(const parser::Assignment& node);
 		void stage1NewRecord(const parser::RecordBlock& node);
 		void stage1CloseRecord(const parser::RecordBlock& node);
@@ -234,6 +239,7 @@ namespace compiler {
 		std::unique_ptr<::llvm::LLVMContext> llvmCtxPtr;
 		std::unique_ptr<::llvm::Module> mainEntryModulePtr;
 		std::unique_ptr<::llvm::IRBuilder<>> llvmBuilderPtr;
+		std::unique_ptr<::llvm::IRBuilder<>> llvmVariableBuilderPtr;
 		std::unique_ptr<::llvm::TargetMachine> llvmTargetMachinePtr;
 			
 		const ::llvm::Target* llvmTarget = nullptr;
@@ -260,6 +266,9 @@ namespace compiler {
 
 		void init();
 		void initBasicTypes();
+		void initCompiletimeClass(compiletime::TypeDescriptor type, const std::string& name);
+		void initCompiletimeCustomClass(compiletime::Class& clazz);
+		void initCompiletimeCustomRecord(compiletime::Class& clazz);
 
 		void terminate();
 
@@ -273,16 +282,44 @@ namespace compiler {
 
 		std::string generateTempInstanceName(const language::ParseNode* node);
 
-		void buildFunctions(const compiletime::ScopedEnvironment& scope);
-		void buildFunction(const compiletime::Instance* receiver, const compiletime::Message& msg, const compiletime::ScopedEnvironment& scope);
-		void buildFunction(const compiletime::Instance* receiver, const compiletime::MessageSelector& selector, const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope);
+		void buildSendMessages(const compiletime::ScopedEnvironment& scope);
+		void buildSendMessage(const compiletime::Instance* receiver, const compiletime::Message& msg, const compiletime::ScopedEnvironment& scope);
 		
-		void buildAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope);
-		void buildIntegerAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope);
-		void buildRealAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope);
-		
+		compiletime::ReturnValue primitiveAssignment(const compiletime::Instance* receiver, const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope);
+		compiletime::ReturnValue primitiveStringAssignment(const compiletime::Instance* receiver, const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope);
 
-		void outputModule(compiletime::Module* module, OutputFormat outFmt, const CppString& objName);
+		compiletime::ReturnValue objectAssignment(const compiletime::Instance* receiver, const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope);
+		
+		compiletime::ReturnValue moduleMain(const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope, const CppString& methodName);
+
+
+		llvm::Constant* getLLVMValue(const compiletime::Instance* instance);
+		llvm::Type* getLLVMType(const compiletime::TypeDecl& type);
+		llvm::Type* getLLVMType(const compiletime::TypeDescriptor& type);
+
+		void outputModule(compiletime::Module* module, OutputFormat outFmt, CppString& objName);
+
+		void createExternalFunction(llvm::Module& module, const std::string& functionName, llvm::FunctionType* funcType);
+		
+		void initModuleExternalRuntimeFunctions(compiletime::Module& module);
+
+		compiletime::Module* createModule(const parser::ModuleBlock& node);
+
+		void buildCode(compiletime::Module& module);
+
+		void buildCode(const compiletime::NamespaceBlock& ns, const compiletime::Module& module);
+
+		void buildCode(const compiletime::ExtendsBlock& extensionBlock);
+
+		void buildCode(const compiletime::ClassBlock& classBlock);
+		void buildCode(const compiletime::MessageBlock& msgBlock);
+
+		void buildClassInfo(compiletime::NamespaceBlock& ns);
+
+		CppString getElementName(const compiletime::CodeElement& element);
+		void initCodeElement(compiletime::CodeElement& element, const CppString& name, const language::ParseNode& node);
+
+		void checkTypes(compiletime::ScopedEnvironment& scope);
 	};
 
 

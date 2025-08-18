@@ -67,6 +67,24 @@ int main()
 {
 	Runtime_init();
 
+	int argc = 2;
+	const char* argv[] = {"hello", "foob"};
+
+	auto args = Runtime_array_new(argc, typeString);
+	for (int i = 0; i < argc; i++) {
+
+		auto cmdArg = Runtime_string_new(argv[i]);
+		Runtime_array_set_str (args, i, cmdArg);
+	}
+
+	for (int i = 0; i < argc; i++) {
+		auto cmdArg = Runtime_array_at(args, i);
+		Runtime_string_handle s = *((Runtime_string_handle*)cmdArg);
+		Runtime_printf("%s\n", Runtime_string_get_cstr(s));
+	}
+
+	Runtime_array_delete(args);
+
 
 	Runtime_printf("*********************************************************************\n");
 

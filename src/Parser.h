@@ -190,12 +190,12 @@ class LiteralNode : public language::ParseNode {
 public:
 
 	enum Type {
-		INTEGER_LITERAL,
-		DECIMAL_LITERAL,
-		HEXADECIMAL_LITERAL,
-		BINARY_LITERAL,
-		BOOLEAN_LITERAL,
-		STRING_LITERAL,
+		INTEGER_LITERAL, //signed/unsigned integer types, from 8bit to 128
+		DECIMAL_LITERAL, //real  numbers, 32/64 bit
+		HEXADECIMAL_LITERAL, //unsigned integers in hex format
+		BINARY_LITERAL, //unsigned integers in binary format
+		BOOLEAN_LITERAL, //bools in true/false
+		STRING_LITERAL,  
 	};
 
 	std::string val;
@@ -501,56 +501,14 @@ public:
 };
 
 
-class MessageDeclaration : public language::ParseNode {
-public:
-	std::vector<ParamNode*> params;
-	bool msgIsClosure = false;
 
-	TupleNode* returnType = nullptr;
-
-	virtual ~MessageDeclaration() {
-		for (auto p : params) {
-			delete p;
-		}
-
-		delete returnType;
-	}
-
-	virtual bool hasChildren() const {
-		return true;
-	}
-
-	virtual void getChildren(std::vector<language::ParseNode*>& children) const {
-		language::ParseNode::getChildren(children);
-		children.insert(children.end(), params.begin(), params.end());
-
-		if (nullptr != returnType) {
-			children.push_back(returnType);
-		}
-
-	}
-
-	virtual std::string printInfo() const {
-		std::string result = "message declaration: '" + name + "' (closure: "; 
-		result += msgIsClosure ? "true" : "false";
-		result += ")";
-		if (nullptr == returnType) {
-			result += ", no return type defined";
-		}
-
-		return result;
-	};
-
-	virtual void accept(language::AstVisitor& v) const;
-};
 
 class MessageBlock : public language::ParseNode {
 public:
 	MessageDeclaration* msgDecl = nullptr;
 	StatementsBlock* statements;
 
-	virtual ~MessageBlock() {
-		delete msgDecl;
+	virtual ~MessageBlock() {		
 		delete statements;
 	}
 
@@ -560,9 +518,7 @@ public:
 
 	virtual void getChildren(std::vector<language::ParseNode*>& children) const {
 		language::ParseNode::getChildren(children);
-		if (nullptr != msgDecl) {
-			children.push_back(msgDecl);
-		}
+		
 
 		if (nullptr != statements) {
 			children.push_back(statements);
@@ -579,7 +535,56 @@ public:
 
 };
 
+class MessageDeclaration : public language::ParseNode {
+public:
+	std::vector<ParamNode*> params;
+	bool msgIsClosure = false;
 
+	TupleNode* returnType = nullptr;
+
+	MessageBlock* messageBlock = nullptr;
+
+	virtual ~MessageDeclaration() {
+		for (auto p : params) {
+			delete p;
+		}
+
+		delete returnType;
+
+		delete messageBlock;
+	}
+
+	virtual bool hasChildren() const {
+		return true;
+	}
+
+	virtual void getChildren(std::vector<language::ParseNode*>& children) const {
+		language::ParseNode::getChildren(children);
+		children.insert(children.end(), params.begin(), params.end());
+
+		if (nullptr != messageBlock) {
+			children.push_back(messageBlock);
+		}
+
+		if (nullptr != returnType) {
+			children.push_back(returnType);
+		}
+
+	}
+
+	virtual std::string printInfo() const {
+		std::string result = "message declaration: '" + name + "' (closure: ";
+		result += msgIsClosure ? "true" : "false";
+		result += ")";
+		if (nullptr == returnType) {
+			result += ", no return type defined";
+		}
+
+		return result;
+	};
+
+	virtual void accept(language::AstVisitor& v) const;
+};
 
 class MsgInstanceNode : public language::ParseNode {
 public:
@@ -619,6 +624,38 @@ public:
 };
 
 
+class ExtendsBlock : public language::ParseNode {
+public:
+	std::string objectToExtend;
+
+	std::vector<ScopeNode*> scopes;
+	std::vector<MessageDeclaration*> messages;
+
+
+	virtual ~ExtendsBlock() {
+		
+	}
+
+	virtual bool hasChildren() const {
+		return true;
+	}
+
+	virtual void getChildren(std::vector<language::ParseNode*>& children) const {
+		language::ParseNode::getChildren(children);
+
+		children.insert(children.end(), scopes.begin(), scopes.end());
+
+		children.insert(children.end(), messages.begin(), messages.end());
+	}
+
+	virtual std::string printInfo() const {
+		std::string result = "extends: " + name + ", extending : " + objectToExtend;
+
+		return result;
+	};
+
+	virtual void accept(language::AstVisitor& v) const;
+};
 
 class ClassBlock : public language::ParseNode {
 public:
@@ -626,7 +663,7 @@ public:
 	std::string super;
 
 	std::vector<ScopeNode*> scopes;
-	std::vector<MessageBlock*> messages;
+	std::vector<MessageDeclaration*> messages;
 	
 
 	virtual ~ClassBlock() {
@@ -843,6 +880,7 @@ public:
 		MESSAGE_DECL,
 		MESSAGE_BLOCK,
 		MESSAGE_PARAM,
+		EXTENDS,
 		ERROR,
 	};
 
@@ -870,6 +908,7 @@ public:
 		"MESSAGE",
 		"MESSAGE_DECL",
 		"MESSAGE_BLOCK",
+		"EXTENDS",
 		"ERROR"
 	};
 
@@ -1222,6 +1261,108 @@ public:
 		return ctx.prevToken();
 	}
 
+
+	ExtendsBlock* extendsBlock(const lexer::FileContext& ctx, language::ParseNode* parent) {
+		ExtendsBlock* result = nullptr;
+
+		ParseStateGuard pg(*this, EXTENDS, ctx, "Parsing extends statement, invalid state exiting parse", result);
+
+		verifyTokenOrFail(ctx.getCurrentToken(),
+			lexer::Token::KEYWORD,
+			language::Keywords[language::KEYWORD_EXTENDS],
+			ctx,
+			"Parsing extension, expected 'extends' keyword",
+			result);
+
+
+
+		result = new ExtendsBlock();
+		result->parent = parent;
+		result->token = ctx.getCurrentToken();
+
+
+		nextToken(ctx, parent);
+		auto tok = ctx.getCurrentToken();
+
+		verifyTokenTypeOrFail(tok,
+			lexer::Token::IDENTIFIER,
+			ctx,
+			"Parsing class, expected identifier for the class/type being extended",
+			result);
+
+		result->name = "extends";
+		result->objectToExtend = tok.text.str();
+
+		nextToken(ctx, result);
+		tok = ctx.getCurrentToken();
+
+		verifyTokenTypeOrFail(tok,
+			lexer::Token::OPEN_BLOCK,
+			ctx,
+			"Parsing extension, expected open block",
+			result);
+
+
+
+
+
+		nextToken(ctx, result);
+		tok = ctx.getCurrentToken();
+
+		//class should be in place, now build out the innards
+
+		language::CompileFlags currentFlags;
+
+		while (ctx.getCurrentToken().type != lexer::Token::CLOSE_BLOCK) {
+			tok = ctx.getCurrentToken();
+			if (tok.type == lexer::Token::AT_SIGN) {
+				currentFlags = language::CompileFlags();
+				currentFlags = compilerFlags(ctx, parent);
+				nextToken(ctx, result);
+			}
+			else if (tok.type == lexer::Token::KEYWORD && (tok.text == language::Keywords[language::KEYWORD_MSG])) {
+				//message declaration and block
+
+				MessageDeclaration* msgDecl = messageDecl(ctx, result);
+				if (!currentFlags.flags.empty()) {
+					msgDecl->flags = currentFlags;
+				}
+				currentFlags.clear();
+
+				nextToken(ctx, result);
+
+				verifyTokenTypeOrFail(ctx.getCurrentToken(),
+					lexer::Token::OPEN_BLOCK,
+					ctx,
+					"Parsing class, expected message def open block '{'",
+					result);
+
+				MessageBlock* msgBlock = messageBlock(ctx, msgDecl);
+				msgBlock->name = msgDecl->name;
+				msgBlock->msgDecl = msgDecl;				
+
+				msgDecl->messageBlock = msgBlock;
+
+				result->messages.push_back(msgDecl);
+
+				nextToken(ctx, result);
+			}
+		}
+
+
+
+
+
+		verifyTokenTypeOrFail(ctx.getCurrentToken(),
+			lexer::Token::CLOSE_BLOCK,
+			ctx,
+			"Parsing class, expected class close block '}'",
+			result);
+
+
+		return result;
+	}
+
 	ClassBlock* classBlock(const lexer::FileContext& ctx, language::ParseNode* parent) {
 		ClassBlock* result = nullptr;
 		
@@ -1369,13 +1510,13 @@ public:
 					"Parsing class, expected message def open block '{'",
 					result);
 
-				MessageBlock* msgBlock = messageBlock(ctx, result);
+				MessageBlock* msgBlock = messageBlock(ctx, msgDecl);
 				msgBlock->name = msgDecl->name;
 				msgBlock->msgDecl = msgDecl;
 
-				msgDecl->parent = msgBlock;
+				msgDecl->messageBlock = msgBlock;
 
-				result->messages.push_back(msgBlock);
+				result->messages.push_back(msgDecl);
 
 				nextToken(ctx, result);
 			}
@@ -1763,18 +1904,15 @@ public:
 						switch (second.type) {
 							case lexer::Token::DOT: {
 								result = instance(ctx, parent);
-							}
-							break;
+							} break;
 
 							case lexer::Token::IDENTIFIER: {
 								result = instance(ctx, parent);
-							}
-							break;
+							} break;
 
 							case lexer::Token::COLON: {
 								result = variableDef(ctx, parent);
-							}
-														 break;
+							}break;
 
 							default: {
 								error(second, ctx, "building LHS, invalid code, expecting '.', operator, or method name", result);
@@ -2033,8 +2171,13 @@ public:
 				sendMessageTok = peekNext(ctx);
 			}
 
-			result = sendMessage(ctx, parent, lhs);
-			result->token = sendMessageTok;
+			if (peekNext(ctx).type == lexer::Token::END_OF_STATEMENT) {
+				result = lhs;
+			}
+			else {
+				result = sendMessage(ctx, parent, lhs);
+				result->token = sendMessageTok;
+			}
 		}
 		/*
 		
@@ -2164,19 +2307,18 @@ public:
 		SendMessage* result = nullptr;
 
 		ParseStateGuard pg(*this, SEND_MESSAGE, ctx, "Parsing send message, invalid state exiting parse", result);
+
+
 		
+
+		auto resultTok = ctx.getCurrentToken();
+
 		result = new SendMessage();
 		result->parent = parent;
-		result->token = ctx.getCurrentToken();
-
-		auto tok = ctx.getCurrentToken();
-
+		result->token = resultTok;
 		result->instance = instance;
-		
 		instance->parent = result;
-
 		nextToken(ctx, result);
-		
 		auto msg = message(ctx, result);
 		result->message = msg;
 
@@ -2660,9 +2802,20 @@ public:
 			}break;
 
 
-			case lexer::Token::CLOSE_BLOCK: { //group! let expression handle it				
+			case lexer::Token::CLOSE_BLOCK: { 
 				if (nullptr == result) {
 					auto prevTok = this->peekPrev(ctx);
+					if (prevTok.type == lexer::Token::COMMENT || prevTok.type == lexer::Token::COMMENT_END || prevTok.type == lexer::Token::COMMENT_START) {
+						ctx.saveCurrentToken();
+					
+						while (prevTok.type == lexer::Token::COMMENT || prevTok.type == lexer::Token::COMMENT_END || prevTok.type == lexer::Token::COMMENT_START) {
+							this->prevToken(ctx);
+							prevTok = ctx.getCurrentToken();
+						}
+
+						ctx.restoreCurrentToken();
+					}
+					
 					if (prevTok.type == lexer::Token::OPEN_BLOCK) {
 						emptyBlock = true;
 					}
@@ -2695,6 +2848,9 @@ public:
 
 		if (first.type == lexer::Token::KEYWORD && first.text == language::Keywords[language::KEYWORD_CLASS]) {
 			result = classBlock(ctx, parent);
+		}
+		else if (first.type == lexer::Token::KEYWORD && first.text == language::Keywords[language::KEYWORD_EXTENDS]) {
+			result = extendsBlock(ctx, parent);
 		}
 		else if (first.type == lexer::Token::KEYWORD && first.text == language::Keywords[language::KEYWORD_RECORD]) {
 			result = recordBlock(ctx, parent);
@@ -2840,12 +2996,12 @@ public:
 					curFlag = tok.text.str();
 				}
 				else if (tok.type == lexer::Token::COMMA) {
-					flags.flags.push_back(curFlag);
+					flags.flags.push_back( std::make_pair(curFlag,""));
 					curFlag = "";
 				}
 				else if (tok.type == lexer::Token::CLOSE_BRACKET) {
 					if (!curFlag.empty()) {
-						flags.flags.push_back(curFlag);
+						flags.flags.push_back(std::make_pair(curFlag, ""));
 					}
 					
 					break;
@@ -3089,19 +3245,28 @@ public:
 	}
 
 	void commentCheck(const lexer::FileContext& ctx, language::ParseNode* parent) {
-		const lexer::Token& token = ctx.getCurrentToken();
+		
 
-		if (token.type == lexer::Token::COMMENT_START || token.type == lexer::Token::COMMENT) {
-			auto commentNode = comment(*currentCtx, parent);
-			if (nullptr != commentNode) {
-				if (nullptr != parent) {
-					parent->comments.push_back(commentNode);
+		bool commentsFound = true;
+		while (commentsFound) {
+			const lexer::Token& token = ctx.getCurrentToken();
+
+			if (token.type == lexer::Token::COMMENT_START || token.type == lexer::Token::COMMENT) {
+				commentsFound = true;
+				auto commentNode = comment(*currentCtx, parent);
+				if (nullptr != commentNode) {
+					if (nullptr != parent) {
+						parent->comments.push_back(commentNode);
+					}
+					else {
+						delete commentNode;
+					}
 				}
-				else {
-					delete commentNode;
-				}
+				nextToken(ctx, nullptr, false);
 			}
-			nextToken(ctx, nullptr,false);
+			else {
+				commentsFound = false;
+			}
 		}
 	}
 

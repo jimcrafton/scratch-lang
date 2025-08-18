@@ -347,6 +347,11 @@ public:
         return (ch == '.');
     }
 
+    bool underscore(const char& ch)
+    {
+        return (ch == '_');
+    }
+
     bool reservedCh(const char& ch)
     {
         return openParen(ch)||closeParen(ch)||openBlock(ch)||
@@ -390,7 +395,8 @@ public:
         DIGIT = 2,
         A_Z = 3,
         A_Z_DIGIT = 4,
-        DECIMAL_DIGIT = 5,
+        A_Z_DIGIT_UNDERSCORE,
+        DECIMAL_DIGIT,
         HEXADECIMAL_DIGIT,
         BINARY_DIGIT,
         VERSION_DIGIT,
@@ -417,6 +423,7 @@ public:
         EQUALS_SIGN,
         AT_SIGN,
         DOT,
+        UNDERSCORE,
         ERROR,
         UNKNOWN = 0xFFFFFFFF
     };
@@ -694,7 +701,7 @@ public:
             }
             break;
 
-            case A_Z: case A_Z_DIGIT: {
+            case A_Z: case A_Z_DIGIT: case A_Z_DIGIT_UNDERSCORE: {
                 currentToken.type = Token::IDENTIFIER;
 
                 if (std::find(language::Keywords.begin(), language::Keywords.end(), currentToken.text.str()) != language::Keywords.end()) {
@@ -703,7 +710,7 @@ public:
                         currentToken.type = Token::BOOLEAN_LITERAL;
                     }
                 }
-                if (state == A_Z_DIGIT) {
+                if ((state == A_Z_DIGIT) || (state == A_Z_DIGIT_UNDERSCORE)) {
                     popState();
                 }
             }
@@ -893,6 +900,10 @@ public:
                     pushState(A_Z_DIGIT);
                     reprocessCh = true;
                 }
+                else if (underscore(ch)) {
+                    pushState(A_Z_DIGIT_UNDERSCORE);
+                    reprocessCh = true;
+                }
                 else if (dot(ch)) {
                     appendToLexeme = false;
                     tokenReady = true;
@@ -919,10 +930,15 @@ public:
             }
             break;
 
+
             case A_Z_DIGIT: {
                 if (dot(ch)) {
                     appendToLexeme = false;
                     tokenReady = true;
+                    reprocessCh = true;
+                }
+                else if (underscore(ch)) {
+                    pushState(A_Z_DIGIT_UNDERSCORE);
                     reprocessCh = true;
                 }
                 else if (colon(ch)) {
@@ -944,6 +960,36 @@ public:
                 }
                 else {
                     error( "Invalid alpha num char, not in A-z or a-z or 0-9");
+                    return false;
+                }
+            }
+            break;
+
+            case A_Z_DIGIT_UNDERSCORE: {
+                if (dot(ch)) {
+                    appendToLexeme = false;
+                    tokenReady = true;
+                    reprocessCh = true;
+                }
+                else if (colon(ch)) {
+                    appendToLexeme = false;
+                    tokenReady = true;
+                    reprocessCh = true;
+                }
+                else if (comma(ch)) {
+                    appendToLexeme = false;
+                    tokenReady = true;
+                    reprocessCh = true;
+                }
+                else if (whitespace(ch) || reservedCh(ch)) {
+                    tokenReady = true;
+                    reprocessCh = !whitespace(ch);
+                }
+                else if (digit(ch) || alpha(ch) || underscore(ch)) {
+                    appendToLexeme = true;
+                }
+                else {
+                    error("Invalid alpha num char, not in A-z or a-z or 0-9 or '_'");
                     return false;
                 }
             }

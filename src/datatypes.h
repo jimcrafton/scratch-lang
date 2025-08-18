@@ -3,6 +3,8 @@
 #include "types.h"
 #include <string>
 
+#include "scratch_runtime.h"
+
 
 
 namespace runtime {
@@ -16,6 +18,7 @@ namespace datatypes {
 		typedef char charT;
 	};
 
+	
 	class string {
 	public:
 
@@ -36,8 +39,10 @@ namespace datatypes {
 
 		uint64_t length() const;
 		uint64_t empty() const;
+
+		const char* c_str() const { return data.c_str(); }
 	private:
-		void* data = nullptr;
+		std::string data;
 	};
 
 

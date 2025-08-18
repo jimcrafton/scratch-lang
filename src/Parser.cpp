@@ -123,6 +123,11 @@ namespace parser {
 		v.visitStatementsBlock(*this);
 	}
 
+	void ExtendsBlock::accept(language::AstVisitor& v) const
+	{
+		v.visitExtendsBlock(*this);		
+	}
+
 	void ClassBlock::accept(language::AstVisitor& v) const
 	{
 		v.visitClassBlock(*this);

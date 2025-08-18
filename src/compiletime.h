@@ -47,6 +47,9 @@ namespace compiletime {
 	typedef typesystem::TypeDescriptor TypeDescriptor;
 
 
+	
+
+	
 	class Type {
 	public:
 			
@@ -96,26 +99,16 @@ namespace compiletime {
 	class SendMessage;
 	class Module;
 
-	class CodeVisitor {
-	public:
-		virtual ~CodeVisitor() {}
 
-		virtual void visitNamespace(const Namespace&) {}
-		virtual void visitType(const TypeDecl&) {}
-		virtual void visitVariable(const Variable&) {}
-		virtual void visitInstance(const Instance&) {}
-		virtual void visitMessage(const Message&) {}
-		virtual void visitSendMessage(const SendMessage&) {}
-	};
-
-		
+	class Class;
 
 	/*
 	* common base class that links back to the AST object and into the actual source file
 	*/
 	class CodeElement {
 	public:
-		CodeElement() {}
+		CodeElement() {}		
+
 		CodeElement(const CppString& n) :name(n) {}
 
 		virtual ~CodeElement() {}
@@ -138,11 +131,23 @@ namespace compiletime {
 		const NamespaceBlock* getNamespace() const { return namspaceBlk; }
 		void setNamespace(const NamespaceBlock* v) { namspaceBlk = v; }
 
-		virtual void accept(CodeVisitor& v) const {}
 
-		CppString getFullyQualifiedName() const;
+		virtual CppString getFullyQualifiedName() const;
 
 		virtual bool scopeConsideredGlobal() const { return false; }
+
+
+		const Flags& getFlags() const { return flags; }
+		Flags& getFlags() { return flags; }
+		bool hasFlag(const CppString& flag) const { return flags.count(flag) != 0; }
+		const Flag* getFlag(const CppString& flag) const { 
+			if (flags.count(flag) == 0) {
+				return nullptr;
+			}
+			const auto& found = flags.find(flag);
+			return &found->second;
+		}
+
 	protected:
 		Flags flags;
 		CppString name;
@@ -198,10 +203,6 @@ namespace compiletime {
 		bool empty() const { return name.empty(); }
 
 
-		virtual void accept(CodeVisitor& v) const {
-			v.visitNamespace(*this);
-		}
-
 		virtual bool scopeConsideredGlobal() const { return true; }
 	private:
 
@@ -239,9 +240,6 @@ namespace compiletime {
 			return result;
 		}
 
-		virtual void accept(CodeVisitor& v) const {
-			v.visitType(*this);
-		}
 
 		llvm::Type* getType(::llvm::IRBuilder<> *builder ) const;
 
@@ -289,6 +287,7 @@ namespace compiletime {
 
 		Namespace varNamespace;
 
+		bool globalVar = false;
 
 		virtual ~Variable() {}
 
@@ -300,9 +299,7 @@ namespace compiletime {
 			return res;
 		}
 
-		virtual void accept(CodeVisitor& v) const {
-			v.visitVariable(*this);
-		}
+		
 	};
 
 	class Instance : public CodeElement {
@@ -319,20 +316,39 @@ namespace compiletime {
 		TypeDecl typeDecl;
 		Value value;
 
-		virtual void accept(CodeVisitor& v) const {
-			v.visitInstance(*this);
-		}
+		const Variable* variable = nullptr;
 
-
-		//llvm::Value* getValue(llvm::IRBuilder<>* builder) const;
+		
 	};
+
 
 	class MessageParameter : public CodeElement {
 	public:
 		const Instance* param = nullptr;
-
+		TypeDecl typeDecl;
 		Instance defValue;
 	};
+
+	class MessageBlock;
+
+	class MessageDecl : public CodeElement {
+	public:
+
+		virtual ~MessageDecl() {}
+		
+		std::vector<std::pair<CppString, MessageParameter>> parameters;
+
+		TypeDecl returnType;
+
+		CppString className;
+
+		virtual CppString getFullyQualifiedName() const;
+
+		CppString getNameWithArgs() const;
+
+		MessageBlock* impl = nullptr;
+	};
+
 
 
 	class Message : public CodeElement {
@@ -351,11 +367,9 @@ namespace compiletime {
 
 		Type type;
 
-		std::unordered_map<CppString, MessageParameter> parameters;
+		std::vector<std::pair<CppString, MessageParameter>> parameters;
 
-		virtual void accept(CodeVisitor& v) const {
-			v.visitMessage(*this);
-		}
+		Instance* returnVal=nullptr;
 	};
 
 
@@ -379,9 +393,7 @@ namespace compiletime {
 
 		Message msg;
 		const Instance* instance = nullptr;
-		virtual void accept(CodeVisitor& v) const {
-			v.visitSendMessage(*this);
-		}
+		
 
 		MessageSelector getSelector() const {
 			return MessageSelector(msg);
@@ -390,7 +402,7 @@ namespace compiletime {
 
 	class Block : public CodeElement {
 	public:
-		ScopedEnvironment* blockScope = nullptr;
+		
 	};
 
 	class VariablesBlock : public Block {
@@ -407,7 +419,7 @@ namespace compiletime {
 	};
 
 
-
+	class ClassBlock;
 
 	class MessageBlock : public Block {
 	public:
@@ -416,12 +428,21 @@ namespace compiletime {
 		PreConditionBlock preConditions;
 		PostConditionBlock postConditions;
 
+		MessageDecl* msgDecl = nullptr;
+		const Instance* returnVal = nullptr;
 
-
-		//CodeFragmentBlock code;
+		CppString className;
 	};
 
+	class ExtendsBlock : public Block {
+	public:
 
+		CppString extensionTarget;
+
+
+		std::map<CppString, MessageDecl> messages;
+		std::map<CppString, MessageBlock> implementations;
+	};
 
 	class ClassBlock : public Block {
 	public:
@@ -429,8 +450,10 @@ namespace compiletime {
 		CppString superClassName;
 
 		std::map<CppString, VariablesBlock> memberVars;
-			
-		std::map<CppString, MessageBlock> messages;
+
+		std::map<CppString, MessageDecl> messages;
+		
+		std::map<CppString, MessageBlock> implementations;
 	};
 
 
@@ -438,7 +461,7 @@ namespace compiletime {
 	public:
 		VariablesBlock vars;
 
-
+		std::unordered_map<CppString, ExtendsBlock> extendsDefs;
 		std::unordered_map<CppString, ClassBlock> classDefs;
 	};
 
@@ -511,7 +534,23 @@ namespace compiletime {
 		NamespaceBlock* popCurrentNamespace();
 		NamespaceBlock* createNewNamespace(const CppString& name);
 
+
+		const NamespaceBlock* getGlobalNamespace() const { return &globalNamespace; }
+		NamespaceBlock* getGlobalNamespace() { return &globalNamespace; }
+
 		virtual bool scopeConsideredGlobal() const { return true; }
+
+		ExtendsBlock* getCurrentExtendsBlock() { return currentExtendsBlock; }
+		const ExtendsBlock* getCurrentExtendsBlock() const { return currentExtendsBlock; }
+		void setCurrentExtendsBlock(ExtendsBlock* val) { currentExtendsBlock =val; }
+
+		ClassBlock* getCurrentClassBlock() { return currentClassBlock; }
+		const ClassBlock* getCurrentClassBlock() const { return currentClassBlock; }
+		void setCurrentClassBlock(ClassBlock* val) { currentClassBlock = val; }
+
+		MessageBlock* getCurrentMessageBlock() { return currentMessageBlock; }
+		const MessageBlock* getCurrentMessageBlock() const { return currentMessageBlock; }
+		void setCurrentMessageBlock(MessageBlock* val) { currentMessageBlock = val; }
 	private:
 		ScopedEnvironment* globalEnv = nullptr;
 		ScopedEnvironment* currentScope = nullptr;
@@ -521,6 +560,11 @@ namespace compiletime {
 		std::map<CppString, Import> imports;
 		NamespaceBlock globalNamespace;
 		NamespaceBlock* currentNamespace;
+
+		ExtendsBlock* currentExtendsBlock;
+		ClassBlock* currentClassBlock;
+		MessageBlock* currentMessageBlock;
+		
 	};
 
 
@@ -549,39 +593,40 @@ namespace compiletime {
 		virtual void init(const CppString& n, compiler::Compiler& c);
 
 		Module* primaryModule();
+
+		virtual int findStartup() const { return 0; }
+
+		virtual const MessageDecl* getStartupMain() const { return nullptr; }
 	};
 
 	class Program : public ExecutableFragment {
 	public:
-		CppString mainEntryFunction;
+		CppString mainEntryFunction = "main:";
 		virtual ~Program() {}
+
+		virtual int findStartup() const ;
+		virtual const MessageDecl* getStartupMain() const;
 	};
 
 	class Library : public ExecutableFragment {
 	public:
 		virtual ~Library() {}
-		CppString libInitFunction;
-		CppString libTerminationFunction;
+		CppString libInitFunction = "libInit";
+		CppString libTerminationFunction = "libTerm";
+
+		virtual int findStartup() const ;
+		virtual const MessageDecl* getStartupMain() const;
 	};
-
-
-
-
-
-	class Class : public CodeElement {
-	public:
-
-
-		std::unordered_map<CppString, MessageSelector > message;
-	};
-
-
 
 
 
 
 	class ScopedEnvironment {
 	public:
+
+		
+
+
 		ScopedEnvironment(const compiler::Compiler& c) :compiler(c), parent(nullptr) {}
 
 		~ScopedEnvironment() {
@@ -641,7 +686,7 @@ namespace compiletime {
 			return types.find(name)->second;
 		}
 
-		bool addType(const TypeDecl& t);
+		TypeDecl* addType(const TypeDecl& t);
 
 		bool hasInstance(const CppString& name) const {
 			return instances.count(name) != 0;
@@ -680,9 +725,9 @@ namespace compiletime {
 			return variables;
 		}
 
-		void addInstance(const Instance& i);
+		Instance* addInstance(const Instance& i);
 
-		bool addVariable(const Variable& v);
+		Variable* addVariable(const Variable& v);
 
 
 		CppString getFullName() const;
@@ -701,7 +746,7 @@ namespace compiletime {
 			return msgSends;
 		}
 
-		void addSendMessage(const SendMessage& msg);
+		SendMessage* addSendMessage(const SendMessage& msg);
 
 		void addStringLiteral(const CppString& name, const datatypes::string& strlit);
 
@@ -714,7 +759,7 @@ namespace compiletime {
 		}
 
 
-		void addPrimLiteral(const CppString& name, const Primitive& prim);
+		Primitive* addPrimLiteral(const CppString& name, const Primitive& prim);
 
 		bool hasPrimLiteral(const CppString& name) const {
 			return primitives.count(name) != 0;
@@ -732,6 +777,10 @@ namespace compiletime {
 		bool isGlobal() const {
 			return module == scopedElement;
 		}
+
+
+		void addLocalVar(const CppString& name, llvm::AllocaInst* var) const ;
+		llvm::AllocaInst* getLocalVar(const CppString& name) const;
 	private:
 
 		//this should be the object instance that the scope is part of 
@@ -749,20 +798,204 @@ namespace compiletime {
 
 		std::map<CppString, Primitive> primitives;
 
-
+		mutable std::map<CppString, llvm::AllocaInst*> localVars;
 	};
 
 
 
 	//*****************************************************************************
 
+	class ReturnValue {
+	public:
+		ReturnValue() {}
+		ReturnValue(bool v) :success(v) {}
+
+		operator bool () const {
+			return success;
+		}
+
+		bool operator==(bool rhs) const { return success == rhs; }
+		ReturnValue& operator=(bool rhs) { success = rhs; return *this;}
+
+	private:
+		bool success = false;
+	};
+
+	
+
+	class InstanceMethod {
+	public:
+		typedef std::function < ReturnValue(const Instance*, const std::vector<const Instance*>&) > MethodT;
+
+		InstanceMethod() {}
+		InstanceMethod(const CppString& n, const CppString& ln, MethodT m, Class* c) :name(n), longname(ln), method(m), clazz(c){}
+
+		CppString name;
+		CppString longname;
+		MethodT method;
+		Class* clazz=nullptr;
+	};
+
+	class ClassMethod {
+	public:
+		typedef std::function < ReturnValue(const std::vector<const Instance*>&) > MethodT;
+		ClassMethod() {}
+		ClassMethod(const CppString& n, const CppString& ln, MethodT m, Class* c) :name(n), longname(ln), method(m), clazz(c) {}
+
+		CppString name;
+		CppString longname;
+		MethodT method;
+		Class* clazz = nullptr;
+	};
+
+
+	class Field {
+	public:
+		CppString name;
+		compiletime::Type type;
+	};
+
+	class Record {
+	public:
+		std::unordered_map<CppString, Field> instanceVars;
+		std::unordered_map<CppString, Field> classVars;
+	};
+
+	class Class : public Record {
+	public:
+		CppString name;
+		Class* super;
+
+		ReturnValue sendMessage(const CppString& selector, const Instance* receiver, const std::vector<const Instance*>& params);
+
+		void addInstanceMethod(const CppString& name, const CppString& longname, InstanceMethod::MethodT m) {
+			instanceMethods[name] = InstanceMethod(name, longname, m, this);
+		}
+
+		void addClassMethod(const CppString& name, const CppString& longname, ClassMethod::MethodT m) {
+			classMethods[name] = ClassMethod(name, longname, m, this);
+		}
+
+		std::unordered_map<CppString, InstanceMethod> instanceMethods;
+		std::unordered_map<CppString, ClassMethod> classMethods;
+
+
+		const InstanceMethod* getInstanceMethod(const CppString& selector, bool longform) const {
+			if (longform) {
+				for (auto m: instanceMethods) {
+					if (m.second.longname == selector) {
+						return &m.second;
+					}
+				}
+			}
+			else {
+				auto found = instanceMethods.find(selector);
+				if (found != instanceMethods.end()) {
+					return &found->second;
+				}
+			}
+			
+			return nullptr;
+		}
+
+		const ClassMethod* getClassMethod(const CppString& selector, bool longform) const {
+			if (longform) {
+				for (const auto& m : classMethods) {
+					if (m.second.longname == selector) {
+						return &m.second;
+					}
+				}
+			}
+			else {
+				auto found = classMethods.find(selector);
+				if (found != classMethods.end()) {
+					return &found->second;
+				}
+			}
+			
+			return nullptr;
+		}
+
+		bool hasInstanceMethod(const CppString& selector, bool longform) const {
+			if (longform) {
+				for (auto m : instanceMethods) {
+					if (m.second.longname == selector) {
+						return true;
+					}
+				}
+				return false;
+			}
+			return instanceMethods.count(selector) == 0 ? false : true;			
+		}
+
+		bool hasClassMethod(const CppString& selector, bool longform) const {
+			if (longform) {
+				for (auto m : classMethods) {
+					if (m.second.longname == selector) {
+						return true;
+					}
+				}
+				return false;
+			}
+			return classMethods.count(selector) == 0 ? false : true;
+		}
+
+		static InstanceMethod::MethodT NoOpInstance;
+		static ClassMethod::MethodT NoOpClass;
+
+	};
+
+	typedef std::map<CppString, Class*> ClassMap;
 	class Compiletime {
 	public:
+
+
+		class Error {
+		public:
+			std::string message;		
+
+			Error(const std::string& err) :message(err) {}
+
+		};
+
+
+		class MessageNotFound: public Error {
+		public:
+			MessageNotFound(const std::string& err) :Error(err) {}
+
+		};
+
+		class SelectorEmpty : public Error {
+		public:
+			SelectorEmpty(const std::string& err) :Error(err) {}
+
+		};
+
+
+		class ClassAlreadExists : public Error {
+		public:
+			ClassAlreadExists(const std::string& err) :Error(err) {}
+		};
+
+		class IncorrectSuperClass : public Error {
+		public:
+			IncorrectSuperClass(const std::string& err) :Error(err) {}
+		};
+
+
 		static bool init();
 
+		static void terminate();
+
 		static const std::map< TypeDescriptor, std::string>& globalPrims();
+
+		static Class* getClass(const CppString& name);
+
+		static void addClass(Class* clazz, Class* superClazz=nullptr);
 	private:			
 		Compiletime();
+		
+		static ClassMap classes;
 
 		static std::map<TypeDescriptor, std::string> primitiveTypes;
 		static void initBasicTypes();

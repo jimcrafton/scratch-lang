@@ -79,14 +79,12 @@ namespace datatypes {
 
 	string::string()
 	{
-		data = new datatypes::string_storage();
+		
 	}
 
 	string::~string()
 	{
-		string_storage* ptr = (string_storage*)data;
-
-		delete ptr;
+		
 	}
 
 	string::string(const string& rhs) :
@@ -104,43 +102,30 @@ namespace datatypes {
 
 	void string::assign(const std::string& v)
 	{
-		string_storage* ptr = (string_storage*)data;
-		if (nullptr != ptr) {
-			delete ptr;
-		}
-		ptr = new datatypes::string_storage();
-		ptr->data = v;
+		data = v;
 		//runtime::StringPool::allocate(v.c_str(), v.length());
 	}
 
 	void string::assign(const charT* c_strPtr)
 	{
-		string_storage* ptr = (string_storage*)data;
-		if (nullptr != ptr) {
-			delete ptr;
-		}
-		ptr = new datatypes::string_storage();
-		ptr->data = c_strPtr;
-		//data = runtime::StringPool::allocate(c_strPtr, strlen(c_strPtr));
+		data = c_strPtr;
 	}
 
 	uint64_t string::hash() const
 	{
-		string_storage* ptr = (string_storage*)data;
-
-		return ptr->hash_impl();
+		
+		return std::hash<std::string>{}(data);;
 	}
 
 	uint64_t string::length() const
 	{
-		auto* ptr = (string_storage*)data;
-		return ptr->data.length();
+		
+		return data.length();
 	}
 
 	uint64_t string::empty() const
 	{
-		auto* ptr = (string_storage*)data;
-		return ptr->data.empty();
+		return data.empty();
 	}
 
 	/*

@@ -106,6 +106,12 @@ namespace compiletime {
 				result = builder->getDoubleTy();
 			}break;
 
+			case compiletime::TypeDescriptor::typeString: {
+				result = builder->getPtrTy();
+
+			}break;
+
+
 			default: {
 				result = nullptr;
 			}break;
@@ -117,7 +123,7 @@ namespace compiletime {
 	Module::Module(compiler::Compiler& c):
 		compiler(c)
 	{
-		init(compiler);
+		name = "a";
 	}
 
 	Module::~Module()
@@ -127,11 +133,7 @@ namespace compiletime {
 
 	void Module::init(compiler::Compiler& c)
 	{
-		name = "a";
-
-		llvmModulePtr.reset(c.createModule(name));
-
-		
+		llvmModulePtr.reset(c.createModule(getName()));
 
 		createGlobalScope(c);
 
@@ -146,6 +148,8 @@ namespace compiletime {
 		globalEnv->scopedElement = this;
 
 		c.getGlobalScope()->add(globalEnv);
+
+		globalNamespace.setScope(globalEnv);
 
 		resetScope();
 	}
@@ -205,6 +209,8 @@ namespace compiletime {
 	{
 		name = n;
 		Module* m = new Module(c);
+		m->setName(name);
+		m->init(c);
 		modules.insert(std::make_pair(m->getName(), m));
 		m->resetScope();
 	}
@@ -216,6 +222,101 @@ namespace compiletime {
 		}
 		auto first = modules.begin();
 		return first->second;
+	}
+
+
+	int Program::findStartup() const 
+	{
+		int result = 0;
+		for (auto m : modules) {
+			auto& module = *m.second;
+			for (const auto& extension : module.getGlobalNamespace()->code.extendsDefs) {
+				for (const auto& impl : extension.second.implementations) {
+					if (impl.second.msgDecl->getNameWithArgs() == mainEntryFunction) {
+						result++;
+					}
+				}
+			}
+		}
+
+		return result;
+	}
+
+	const MessageDecl* Program::getStartupMain() const
+	{
+		const MessageDecl* result = nullptr;
+
+		for (auto m : modules) {
+			auto& module = *m.second;
+			//find main
+			// find the class that represents this module
+
+			for (const auto& extension : module.getGlobalNamespace()->code.extendsDefs) {
+				for (const auto& impl: extension.second.implementations) {
+					if (impl.second.msgDecl->getNameWithArgs() == mainEntryFunction) {
+						result = impl.second.msgDecl;
+					}
+				}
+			}
+		}
+
+		return result;
+	}
+
+	int Library::findStartup() const
+	{
+		//library must have and init and term function defined!
+
+		int result = 0;
+		for (auto m : modules) {
+			auto& module = *m.second;
+			//find main
+			// find the class that represents this module
+			compiletime::Class* clazz = compiletime::Compiletime::getClass(module.getName());
+			if (nullptr != clazz) {
+				if (clazz->hasClassMethod(libInitFunction,true)) {
+					if (clazz->hasClassMethod(libTerminationFunction,true)) {
+						result++;
+					}
+				}
+			}
+		}
+
+
+		return result;
+	}
+
+	const MessageDecl* Library::getStartupMain() const
+	{
+		const MessageDecl* result = nullptr;
+
+		for (auto m : modules) {
+			auto& module = *m.second;
+			//find main
+
+			for (const auto& extension : module.getGlobalNamespace()->code.extendsDefs) {
+				bool initFound = false;
+				bool termFound = false;
+				for (const auto& impl : extension.second.implementations) {
+					if (impl.second.msgDecl->getNameWithArgs() == libInitFunction) {
+						//result = impl.second.msgDecl;
+						initFound = true;
+					}
+					if (impl.second.msgDecl->getNameWithArgs() == libTerminationFunction) {
+						//result = impl.second.msgDecl;
+						termFound = true;
+					}
+
+					if (initFound && termFound) {
+						result = impl.second.msgDecl;
+						break;
+					}
+				}
+			}
+		}
+
+
+		return result;
 	}
 
 	ScopedEnvironment* Module::popCurrentScope() {
@@ -244,15 +345,15 @@ namespace compiletime {
 	}
 
 
-	bool ScopedEnvironment::addType(const TypeDecl& t)
+	TypeDecl* ScopedEnvironment::addType(const TypeDecl& t)
 	{
 		auto name = t.fullyQualifiedName();
 		if (hasType(name)) {
-			return false;
+			return nullptr;
 		}
 		auto res = types.insert(std::make_pair(name, t));
 		res.first->second.setScope(this);
-		return true;
+		return &res.first->second;
 	}
 
 	CppString ScopedEnvironment::getFullName() const
@@ -325,22 +426,23 @@ namespace compiletime {
 		}
 	}
 
-	void ScopedEnvironment::addInstance(const Instance& i)
+	Instance* ScopedEnvironment::addInstance(const Instance& i)
 	{
 		if (hasInstance(i.getName())) {
 			//throw Compiler::Error(compiler, "Instance already exists");
-			return;
+			return nullptr;
 		}
 
 		auto res = instances.insert(std::make_pair(i.getName(), i));
 		res.first->second.setScope(this);
+		return &res.first->second;
 	}
 
-	bool ScopedEnvironment::addVariable(const Variable& v)
+	Variable* ScopedEnvironment::addVariable(const Variable& v)
 	{
 		if (hasVariable(v.getName())) {
 			//throw Compiler::Error(compiler, "Variable already exists");
-			return false;
+			return nullptr;
 		}
 
 		printf("'%s' : '%s'\n", v.getName().c_str(), v.typeDecl.getName().c_str());
@@ -349,10 +451,10 @@ namespace compiletime {
 		res.first->second.setScope(this);
 		res.first->second.setNamespace(this->module->getCurrentNamespace());
 
-		return true;
+		return &res.first->second;
 	}
 
-	void ScopedEnvironment::addSendMessage(const SendMessage& msg)
+	SendMessage* ScopedEnvironment::addSendMessage(const SendMessage& msg)
 	{
 		std::string key = msg.msg.getName() + "_to_" + (msg.instance != nullptr ? msg.instance->getName() : std::string("null"));
 		if (!msg.msg.parameters.empty()) {
@@ -363,6 +465,8 @@ namespace compiletime {
 		}
 		auto res = msgSends.insert(std::make_pair(key, msg));
 		res.first->second.setScope(this);
+
+		return &res.first->second;
 	}
 
 	void ScopedEnvironment::addStringLiteral(const CppString& name, const datatypes::string& strlit)
@@ -373,12 +477,13 @@ namespace compiletime {
 		auto res = strings.insert(std::make_pair(name, strlit));
 	}
 
-	void ScopedEnvironment::addPrimLiteral(const CppString& name, const Primitive& prim)
+	Primitive* ScopedEnvironment::addPrimLiteral(const CppString& name, const Primitive& prim)
 	{
 		if (primitives.count(name) != 0) {
-			return;
+			return nullptr;
 		}
 		auto res = primitives.insert(std::make_pair(name, prim));
+		return &res.first->second;
 	}
 
 	bool ScopedEnvironment::resolveVariable(const Variable& var, Variable& outVar)
@@ -411,7 +516,25 @@ namespace compiletime {
 	}
 
 
+	void ScopedEnvironment::addLocalVar(const CppString& name, llvm::AllocaInst* var) const
+	{
+		if (localVars.count(name) == 0) {
+			localVars.insert(std::make_pair(name, var));
+		}
+	}
+
+	llvm::AllocaInst* ScopedEnvironment::getLocalVar(const CppString& name) const
+	{
+		llvm::AllocaInst* result = nullptr;
+		auto found = localVars.find(name);
+		if (found != localVars.end()) {
+			result = found->second;
+		}
+		return result;
+	}
+
 	std::map<TypeDescriptor, std::string> Compiletime::primitiveTypes;
+	ClassMap Compiletime::classes;
 
 	void Compiletime::initBasicTypes()
 	{
@@ -436,14 +559,181 @@ namespace compiletime {
 		};
 	}
 
+
+
+
+	InstanceMethod::MethodT Class::NoOpInstance = [](const Instance* self, const std::vector<const Instance*>& params) {
+
+		return compiletime::ReturnValue(true);
+		};
+
+
+	ClassMethod::MethodT Class::NoOpClass = [](const std::vector<const compiletime::Instance*>& params) {
+
+		return compiletime::ReturnValue(true);
+		};
+
+
+
+	ReturnValue Class::sendMessage(const CppString& selector, const Instance* receiver, const std::vector<const Instance*>& params)
+	{
+		bool foundMethod = false;
+
+		if (selector.empty()) {
+			std::string msg = "message selector is empty for ";
+			if (nullptr == receiver) {
+				msg += "class '" + name + "'";
+			}
+			else {
+				msg += "reciever instance '" + receiver->getName() + "' class '" + name + "'";
+			}
+
+			throw Compiletime::SelectorEmpty(msg);
+		}
+
+		if (nullptr != receiver) {
+			auto found = instanceMethods.find(selector);
+			if (found == instanceMethods.end()) {
+				//try super
+				if (nullptr != super) {
+					return super->sendMessage(selector, receiver, params);
+				}
+			}
+			else {
+				auto& instanceMethod = found->second;
+				foundMethod = true;
+				return instanceMethod.method(receiver, params);
+			}
+		}
+		else {
+			auto found = classMethods.find(selector);
+			if (found == classMethods.end()) {
+				//try super
+				if (nullptr != super) {
+					return super->sendMessage(selector, nullptr, params);
+				}
+			}
+			else {
+				foundMethod = true;
+				auto& classMethod = found->second;				
+				return classMethod.method(params);
+			}
+		}
+
+		if (!foundMethod) {
+			std::string msg = "Unable to find message selector '" + selector + "' for " ;
+			if (nullptr == receiver) {
+				msg += "class '" + name + "'";
+			}
+			else {
+				msg += "reciever instance '" + receiver->getName() + "' class '" + name +"'";
+			}
+
+			throw Compiletime::MessageNotFound(msg);
+		}
+
+		return ReturnValue(false); //indicates unable to find a handler for the message
+	}
+
 	bool Compiletime::init()
 	{
 		Compiletime::initBasicTypes();
+
+		
+		for (auto type: primitiveTypes) {
+			Class* primClass = new Class();
+			primClass->name = type.second;
+
+			Compiletime::classes.insert( std::make_pair(type.second, primClass)  );
+		}
+
+
+		Class* moduleClass = new Class();
+		moduleClass->name = "module";
+		Compiletime::classes.insert(std::make_pair(moduleClass->name, moduleClass));
+
+		
+
+
 		return true;
+	}
+
+	void Compiletime::terminate()
+	{
+		for (auto clazz : Compiletime::classes) {
+			delete clazz.second;
+		}
+		Compiletime::classes.clear();
+	}
+
+
+
+	Class* Compiletime::getClass(const CppString& name)
+	{
+		auto found = Compiletime::classes.find(name);
+		if (found!= Compiletime::classes.end()) {
+			return found->second;
+		}
+		return nullptr;
+	}
+
+	void Compiletime::addClass(Class* clazz, Class* superClazz)
+	{
+		if (Compiletime::classes.count(clazz->name) != 0) {
+			auto msg = "Class '" + clazz->name + "' already exists";
+			throw Compiletime::ClassAlreadExists(msg);
+		}
+
+
+		if (clazz->super != nullptr) {
+			if (clazz->super != superClazz && (nullptr != superClazz)) {
+				auto msg = "Class '" + clazz->name + "' already has a super class and doesn't match super class '" + superClazz->name + "'";
+				throw Compiletime::IncorrectSuperClass(msg);
+			}
+		}
+
+		clazz->super = superClazz;
+
+		Compiletime::classes.insert(std::make_pair(clazz->name, clazz));
 	}
 
 	const std::map<TypeDescriptor, std::string>& Compiletime::globalPrims()
 	{
 		return Compiletime::primitiveTypes;
 	}
+
+	CppString MessageDecl::getNameWithArgs() const
+	{
+		CppString result;
+
+		result = getName();
+
+		if (parameters.size() == 1) {
+			result += ":";
+		}
+		else if (parameters.size() > 1) {
+			result += ":";
+			for (auto p : parameters) {
+				const auto& param = p.second;
+
+				result += param.getName() + ":";
+			}
+		}
+
+		return result;
+	}
+
+	CppString MessageDecl::getFullyQualifiedName() const
+	{
+		CppString result;
+
+		auto nsName = getNamespace()->getFullyQualifiedName();
+		auto moduleName = getScope()->module->getName();
+		result = ((moduleName == className) ? "" : moduleName + ".") +
+			(nsName.empty() ? "" : nsName + ".") +
+			className + "." + getNameWithArgs();
+
+		return result;
+	}
+
 }

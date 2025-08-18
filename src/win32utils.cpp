@@ -7,6 +7,9 @@
 #include <windows.h>
 #include <process.h>
 
+#include <io.h>
+#include <fcntl.h>
+
 
 namespace utils {
 	
@@ -129,13 +132,10 @@ namespace utils {
 	{
 		if ((DWORD)processID_ != DWORD(-1))
 		{
-			HANDLE hProcess = this->childProcess_;//::OpenProcess(PROCESS_ALL_ACCESS, FALSE, processID_);
+			HANDLE hProcess = this->childProcess_;
 			if (hProcess) {
 				DWORD exitCode;
-				GetExitCodeProcess(hProcess, &exitCode);//WaitForSingleObject(hProcess,0);// 	// fails when the process is active
-				//if  (!CloseHandle(hProcess)) {
-				//	throw std::runtime_error( MAKE_ERROR_MSG_2("CloseHandle(hProcess)"));
-			//	}
+				GetExitCodeProcess(hProcess, &exitCode);				
 				return (exitCode == STILL_ACTIVE) ? true : false;
 			}
 		}
@@ -238,7 +238,7 @@ namespace utils {
 	bool Win32Process::createProcess(const std::string& processName, const std::string& arguments)
 	{
 		bool result = false;
-
+		/*
 		canContinueReading_ = true;
 		commandLine_ = processName + " " + arguments;
 
@@ -412,6 +412,83 @@ namespace utils {
 		}
 
 		canContinueReading_ = false;
+		*/
+
+
+		commandLine_ = processName + " " + arguments;
+
+
+		std::string tmp = std::getenv("ComSpec"); //System::getEnvironmentVariable(L"ComSpec");
+
+		if (tmp.empty()) {
+			result = false;
+		}
+		else {
+			std::string shellCmdLine;
+			shellCmdLine += tmp;
+			shellCmdLine += " /A /C ";
+			shellCmdLine += commandLine_;
+
+			BOOL retVal = FALSE;
+
+
+			((STARTUPINFOA*)startInfoPtr_)->dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+			((STARTUPINFOA*)startInfoPtr_)->wShowWindow = SW_HIDE;
+
+			//((STARTUPINFOA*)startInfoPtr_)->hStdOutput = childStdoutWrHandle_;
+			//((STARTUPINFOA*)startInfoPtr_)->hStdError = childStdoutWrHandle_;
+
+			char* cmdLineBuf = new char[shellCmdLine.size() + 1];
+			memset(cmdLineBuf, 0, shellCmdLine.size() + 1);
+			shellCmdLine.copy(cmdLineBuf, shellCmdLine.size());
+
+			
+
+
+			retVal = CreateProcessA(NULL,
+				cmdLineBuf, 	   // applicatin name
+				NULL, 		  // process security attributes
+				NULL, 		  // primary thread security attributes
+				TRUE, 		  // handles are inherited
+				CREATE_NEW_CONSOLE, // creation flags
+				NULL, 		  // use parent's environment
+				NULL, 		  // use parent's current directory
+				(STARTUPINFOA*)startInfoPtr_,  // STARTUPINFO pointer
+				&processInfo_);  // receives PROCESS_INFORMATION
+
+
+
+			if (retVal) {
+				processID_ = processInfo_.dwProcessId;
+				childProcess_ = processInfo_.hProcess;
+				processThreadID_ = processInfo_.dwThreadId;
+			}
+			else {
+				processID_ = GetLastError();
+				DebugBreak();
+			}
+
+
+			::Sleep(800);
+
+			WaitForSingleObject(childProcess_, INFINITE);
+
+			//readPipe();
+
+
+			CloseHandle(childProcess_);
+			
+			
+
+			canContinueReading_ = false;
+
+			childProcess_ = NULL;
+			processID_ = 0;
+
+			delete[] cmdLineBuf;
+
+			result = retVal ? true : false;
+		}
 
 		return result;
 	}

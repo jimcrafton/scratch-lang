@@ -1,9 +1,25 @@
 
 
+module test_main
+
 {
 
+
+extends test_main  {
+	@[static] msg main: args:array  [int32] {
+	
+		g: int32 ;
+		g := 12;
+
+		return 0x56;
+	}
+}
+
+
+#{
 runtime.main := msg (args:array) {
 	
 } ;
+}#
 
 }

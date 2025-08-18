@@ -173,7 +173,11 @@ extern "C" {
 	typedef double double64T;
 
 
+	//handle represents a Message closure object
+	typedef void* Runtime_msg_handle;
 
+	//handle represents an Object instance object
+	typedef void* Runtime_object_handle;
 	
 
 	
@@ -210,6 +214,13 @@ extern "C" {
 
 
 	
+
+	//this should be anything that is not a:
+	//  primitive type like a double, int, bool, etc
+	//  built in type like string, array, dictionary, Message etc
+	//anything else like a Record, Class, 
+	//or an instance of a Record or Class
+
 	struct Runtime_object {
 		void* objectVal;
 		Runtime_objectinfo_ptr infoptr;
@@ -255,7 +266,7 @@ extern "C" {
 
 	
 	typedef void* Runtime_array_handle;
-
+	typedef void* Runtime_string_handle;
 
 
 	bool Runtime_array_init(Runtime_array_handle arr);
@@ -271,6 +282,25 @@ extern "C" {
 	void* Runtime_array_data(Runtime_array_handle self);
 
 	void* Runtime_array_at(Runtime_array_handle self, uint64T index);
+	//utility funcs
+	int8T Runtime_array_at_i8(Runtime_array_handle self, uint64T index);
+	uint8T Runtime_array_at_ui8(Runtime_array_handle self, uint64T index);
+	int16T Runtime_array_at_i16(Runtime_array_handle self, uint64T index);
+	uint16T Runtime_array_at_ui16(Runtime_array_handle self, uint64T index);
+	int32T Runtime_array_at_i32(Runtime_array_handle self, uint64T index);
+	uint32T Runtime_array_at_ui32(Runtime_array_handle self, uint64T index);
+	int64T Runtime_array_at_i64(Runtime_array_handle self, uint64T index);
+	uint64T Runtime_array_at_ui64(Runtime_array_handle self, uint64T index);
+	float32T Runtime_array_at_flt(Runtime_array_handle self, uint64T index);
+	double64T Runtime_array_at_dbl(Runtime_array_handle self, uint64T index);
+	boolT Runtime_array_at_bool(Runtime_array_handle self, uint64T index);
+	Runtime_array_handle Runtime_array_at_arr(Runtime_array_handle self, uint64T index);
+	Runtime_string_handle Runtime_array_at_str(Runtime_array_handle self, uint64T index);
+
+
+	void Runtime_array_set_arr(Runtime_array_handle self, uint64T index, Runtime_array_handle array);
+	void Runtime_array_set_str(Runtime_array_handle self, uint64T index, Runtime_string_handle str);
+
 	void* Runtime_array_begin(Runtime_array_handle self);
 	void* Runtime_array_end(Runtime_array_handle self);
 	
@@ -357,7 +387,7 @@ extern "C" {
 
 	
 
-	typedef void* Runtime_string_handle;
+	
 
 	Runtime_string_handle Runtime_string_new_empty();
 	Runtime_string_handle Runtime_string_new(const charT* c_strPtr);
@@ -417,9 +447,56 @@ extern "C" {
 	void* Runtime_dictionary_at(Runtime_dictionary_handle self, Runtime_string_handle key);
 	
 
+	//----------------------------------------------------------------------------
+	// Runtime_msg_handle
+	struct Runtime_Return {
+		boolT ok;
+		union valueT {
+			Runtime_msg_handle msgV;
+			Runtime_array_handle arrayV;
+			Runtime_string_handle stringV;
+			Runtime_dictionary_handle dictV;
+			int8T int8V;
+			uint8T uint8V;
+			int16T int16V;
+			uint16T uint16V;
+			int32T int32V;
+			uint32T uint32V;
+			int64T int64V;
+			uint64T uint64V;
+			int128T int128V;
+			uint128T uint128V;
+			float32T floatV;
+			double64T doubleV;
+		};
+		valueT val;
+	};
+
+	Runtime_msg_handle Runtime_msg_object_new();
+	Runtime_array_handle Runtime_msg_object_params(Runtime_msg_handle self);
+	void Runtime_msg_object_delete(Runtime_msg_handle self);
+	void Runtime_msg_object_call(Runtime_msg_handle self, Runtime_array_handle callParams, Runtime_Return* returnVal);
+
+	//----------------------------------------------------------------------------
+	
+
+
+
 
 	//----------------------------------------------------------------------------
 	//runtime environment methods
+	//runtime instance
+	
+	typedef void* Runtime_handle;
+	typedef void* Runtime_handle;
+
+	typedef int32T(*Runtime_main_func_ptr)(Runtime_array_handle);
+
+
+	Runtime_handle Runtime_get();	
+	void Runtime_set_main_func(void* msgMain);
+
+
 	//startup
 	int32T Runtime_init();
 

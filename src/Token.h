@@ -25,13 +25,13 @@ namespace language {
         KEYWORD_INHERITS,
         KEYWORD_IMPLEMENTS,
         KEYWORD_PRIVATE,
-        KEYWORD_PUBLIC,
-        KEYWORD_STATIC,
+        KEYWORD_PUBLIC,        
         KEYWORD_RETURN,
         KEYWORD_NIL,
         KEYWORD_SELF,
         KEYWORD_SUPER,
-        KEYWORD_MSG
+        KEYWORD_MSG,
+        KEYWORD_EXTENDS,
     };
     const std::vector<std::string> Keywords = {
             "if",
@@ -49,12 +49,12 @@ namespace language {
             "implements",
             "private",
             "public",
-            "static",
             "return",
             "nil",
             "self",
             "super",
-            "msg"
+            "msg",
+            "extends"
     };
 
     enum ReservedCharactersIdx {

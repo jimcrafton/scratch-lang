@@ -24,34 +24,12 @@
 
 #include <unordered_map>
 
-
+#include "llvm/Linker/Linker.h"
 
 
 namespace compiler {
-	class TypeReducer : public language::AstVisitor {
-	public:
-		virtual ~TypeReducer() {}
-		Compiler& compiler;
-		TypeReducer(Compiler& c) :compiler(c) {
-
-		}
-	};
-
-	class ModuleCheck : public language::AstVisitor {
-	public:
-		virtual ~ModuleCheck() {}
-		Compiler& compiler;
-		ModuleCheck(Compiler& c) :compiler(c) {
-
-		}
-
-		virtual void visitModuleBlock(const parser::ModuleBlock& node) {
-			if (state == language::AstVisitor::stateVisitStarted) {
-				compiler.stage1NewModule(node);
-			}
-		}
-
-	};
+	
+	
 
 	class Stage1 : public language::AstVisitor {
 	public:
@@ -131,6 +109,15 @@ namespace compiler {
 			}
 		}
 
+		virtual void visitExtendsBlock(const parser::ExtendsBlock& node) {
+			if (state == language::AstVisitor::stateVisitStarted) {
+				compiler.stage1NewExtendsBlock(node);
+			}
+			else if (state == language::AstVisitor::stateVisitComplete) {
+				compiler.stage1CloseExtendsBlock(node);
+			}
+		}
+
 		virtual void visitMessageDecl(const parser::MessageDeclaration& node) {
 			if (state == language::AstVisitor::stateVisitStarted) {
 				compiler.stage1NewMessageDecl(node);
@@ -160,6 +147,12 @@ namespace compiler {
 		virtual void visitAssignment(const parser::Assignment& node) {
 			if (state == language::AstVisitor::stateVisitStarted) {
 				compiler.stage1NewAssignmentMessage(node);
+			}
+		}
+
+		virtual void visitReturnExpression(const parser::ReturnExpression& node) {
+			if (state == language::AstVisitor::stateVisitComplete) {
+				compiler.stage1NewReturnExpr(node);
 			}
 		}
 
@@ -397,59 +390,74 @@ namespace compiler {
 		stage3();
 	}
 
-	void Compiler::outputModule(compiletime::Module* module, OutputFormat outFmt, const CppString& objName)
+	void Compiler::outputModule(compiletime::Module* module, OutputFormat outFmt, CppString& objName)
 	{
-		auto outputFileName = module->getName() + "_";
+		objName = module->getName() + "_";
 
 		auto tmpv = module->version;
 		std::replace(tmpv.begin(), tmpv.end(), '.', '_');
-		outputFileName += tmpv;
+		objName += tmpv;
 
 		switch (outFmt) {
 			case OUT_INTERMEDIATE: {
-				outputFileName += ".ll";
+				objName += ".ll";
 			}break;
 
 			case OUT_OBJECT: {
-				outputFileName += ".o";
+				objName += ".o";
 			}break;
 		}
 
-		outputModule(outFmt, *module->llvmModulePtr, outputFileName);
+		outputModule(outFmt, *module->llvmModulePtr, objName);
 	}
 
 	void Compiler::link()
 	{
 		Linker linker(cmdlineOpts);
 
-		if (executableCodePtr) {
-			for (auto m : executableCodePtr->modules) {
-				auto module = m.second;
-				std::string objName;
 
-				outputModule(module, OUT_INTERMEDIATE, objName);
-				outputModule(module, OUT_OBJECT, objName);
-
-				Compiler::println("object: " + objName);
-				if (!this->options.compileOnly) {
-					linker.objs.push_back(objName);
-				}
-
-			}
-
-			std::string mainOut;
-			outputMainEntryPoint(OUT_INTERMEDIATE, mainOut);
-			outputMainEntryPoint(OUT_OBJECT, mainOut);
-			Compiler::println("object: " + mainOut);
-			if (!this->options.compileOnly) {
-				linker.objs.push_back(mainOut);
-			}
-
-		}
-		else {
+		llvm::Linker llvmModuleLinker(*mainEntryModulePtr);
+		
+		if (nullptr == executableCodePtr) {
 			throw Compiler::Error(*this, "No executable section");
 		}
 
+
+		
+		
+
+		for (auto m : executableCodePtr->modules) {
+			const auto& module = m.second;
+			std::string objName; 
+
+			
+
+
+			outputModule(module, OUT_INTERMEDIATE, objName);
+			outputModule(module, OUT_OBJECT, objName);
+
+			//auto res = llvmModuleLinker.linkInModule(std::move(module->llvmModulePtr));
+
+			//printf("module->getName: %s, res: %d\n", module->getName().c_str(), res);
+
+
+			Compiler::println("object: " + objName);
+			if (!this->options.compileOnly) {
+				linker.objs.push_back(objName);
+			}
+		}
+
+		
+		
+
+		std::string mainOut;
+		outputMainEntryPoint(OUT_INTERMEDIATE, mainOut);
+		outputMainEntryPoint(OUT_OBJECT, mainOut);
+		Compiler::println("object: " + mainOut);
+		if (!this->options.compileOnly) {
+			linker.objs.push_back(mainOut);
+		}			
+	
 
 		if (!this->options.compileOnly) {
 			Compiler::println("linking executable " + executableCodePtr->getName() + " - " + executableCodePtr->version + "\n");
@@ -482,56 +490,90 @@ namespace compiler {
 		return "main";// "runtime_main";
 	}
 
+	
+	void Compiler::createExternalFunction(llvm::Module& module, const std::string& functionName, llvm::FunctionType* funcType)
+	{
+		module.getOrInsertFunction(functionName, funcType);
+	}
+
 	void Compiler::createMainEntryPoint()
 	{
 			
-		std::string mainFuncName = Compiler::mainEntryFunction();
+		std::string mainFuncName = "main";
 
+		auto mainEntryDecl =  executableCodePtr->getStartupMain();
 		
+		if (nullptr == mainEntryDecl) {
+			throw Compiler::Error(*this, "createMainEntryPoint, No start up declaration found!");
+		}
+
+		auto moduleMainMethod = mainEntryDecl->getFullyQualifiedName();
+
+
 		std::string rtinit = "Runtime_init";
 
-		mainEntryModulePtr->getOrInsertFunction(
-			rtinit,
+		createExternalFunction(*mainEntryModulePtr, 
+			rtinit, 
 			llvm::FunctionType::get(
 				llvmBuilderPtr->getInt32Ty(),
-				llvmBuilderPtr->getVoidTy(), 
-				false
-			)
+				{},
+				false)
 		);
 		
-		llvm::Type* CharTy = llvm::Type::getInt8Ty(*llvmCtxPtr);
-		llvm::Type* CharPtrTy = llvm::PointerType::get(CharTy, 0);
-		llvm::Type* ArgVPtrTy = llvm::PointerType::get(CharPtrTy, 0);
-
-		
-
 
 		std::string rtMain = "Runtime_main_entry_point";
 
-		mainEntryModulePtr->getOrInsertFunction(
+		createExternalFunction(*mainEntryModulePtr,
 			rtMain,
 			llvm::FunctionType::get(
 				llvmBuilderPtr->getInt32Ty(),
-				llvmBuilderPtr->getVoidTy(),
-				false
-			)
+				{},
+				false)
 		);
+
+		auto argsType = getLLVMType(compiletime::TypeDescriptor::typeArray);
+
+		llvm::FunctionType* runtime_main_func = 
+			llvm::FunctionType::get(llvm::Type::getInt32Ty(*llvmCtxPtr), { argsType },false);
+
+		createExternalFunction(*mainEntryModulePtr,
+			moduleMainMethod,
+			runtime_main_func
+		);
+
+
+		
+		auto moduleMainFunction = mainEntryModulePtr->getFunction(moduleMainMethod);
+		
+
+
+		llvm::PointerType* FuncPtrType = runtime_main_func->getPointerTo();
+
+		std::string rtSetMain = "Runtime_set_main_func";
+
+		createExternalFunction(*mainEntryModulePtr,
+			rtSetMain,
+			llvm::FunctionType::get(
+				llvmBuilderPtr->getVoidTy(),
+				FuncPtrType,
+				false)
+		);
+
+
 
 		std::string rtTerm = "Runtime_terminate";
 
-		mainEntryModulePtr->getOrInsertFunction(
+		createExternalFunction(*mainEntryModulePtr,
 			rtTerm,
 			llvm::FunctionType::get(
 				llvmBuilderPtr->getVoidTy(),
-				llvmBuilderPtr->getVoidTy(),
-				false
-			)
-		);
-		
+				{},
+				false)
+		);		
 
 		
 
-		auto returnType = llvm::FunctionType::get(llvmBuilderPtr->getInt32Ty(), llvmBuilderPtr->getVoidTy(), false);
+		auto returnType = llvm::FunctionType::get(llvmBuilderPtr->getInt32Ty(), {}, false);
 		auto mainFunc = mainEntryModulePtr->getFunction(mainFuncName);
 		if (nullptr == mainFunc) {
 			auto mainFuncProto = llvm::Function::Create(returnType,
@@ -558,15 +600,29 @@ namespace compiler {
 		std::vector<llvm::Value*> NoArgs;
 		llvmBuilderPtr->CreateCall(rtInitFunc, NoArgs);
 
+		auto moduleMainMethodVarName = mainEntryDecl->getScope()->module->getName() + "_" +  mainEntryDecl->getName() + "_ptr";
+		llvm::GlobalVariable* GlobalFuncPtr = new llvm::GlobalVariable(
+			*mainEntryModulePtr,
+			FuncPtrType,
+			false, // Not constant
+			llvm::GlobalValue::ExternalLinkage,
+			moduleMainFunction, // Initializer is the function itself
+			moduleMainMethodVarName
+		);
+
+		llvm::LoadInst* mainFuncPtr = llvmBuilderPtr->CreateLoad(FuncPtrType, GlobalFuncPtr, "mainFuncPtr");
 
 
 
+		auto rtSetMainFunc = mainEntryModulePtr->getFunction(rtSetMain);
+		std::vector<llvm::Value*> args = { mainFuncPtr };
+		auto retVal = llvmBuilderPtr->CreateCall(rtSetMainFunc, args);
 		
 
 		auto rtMainFunc = mainEntryModulePtr->getFunction(rtMain);
 
 
-		auto retVal = llvmBuilderPtr->CreateCall(rtMainFunc, NoArgs);
+		retVal = llvmBuilderPtr->CreateCall(rtMainFunc, NoArgs);
 
 
 
@@ -605,85 +661,345 @@ namespace compiler {
 			
 	}
 
+	void Compiler::checkTypes(compiletime::ScopedEnvironment& scope)
+	{		
+
+		for (auto revIt = scope.children.rbegin(); revIt != scope.children.rend(); ++revIt) {
+			auto s = *revIt;
+			checkTypes(*s);
+		}
+
+		//do stuff
+		for (const auto& v : scope.getVariables()) {
+			const auto& var = v.second;
+			if (var.typeDecl.type == compiletime::TypeDescriptor::typeUnknown) {
+				compiletime::Variable resolvedVar;
+				if (!scope.resolveVariable(var, resolvedVar)) {
+					//std::cout << "var '" << var.name << "', type '" << var.type.name << "' undefined" << std::endl;
+
+
+					ErrorItem err;
+					if (resolvedVar.typeDecl.getName().empty()) {
+						err.message = "No type is specified for this variable ('" + var.getName() + "')";
+						err.errCode = NO_VARIABLE_TYPE_NAME;
+					}
+					else {
+						err.message = "No type found for this variable ('" + var.getName() + "') with a type name of '" + var.typeDecl.getName() + "'";
+						err.errCode = NO_VARIABLE_TYPE_DEFINED;
+					}
+					err.code = var.location();
+					err.element = &var;
+					this->errorListing.push_back(err);
+				}
+				else {
+
+					std::cout << "able to resolve var '" << resolvedVar.getName() << "', type '" << resolvedVar.typeDecl.getName() << "', " << resolvedVar.typeDecl.type << std::endl;
+				}
+			}
+		}
+	}
+
 	void Compiler::stage2 ()
 	{
 		//verify var types
-			
 
+		if (nullptr == executableCodePtr) {
+			throw Compiler::Error(*this, "Stage 2, No executable code block found!");
+		}
+		
+		for (auto m : executableCodePtr->modules) {
+			checkTypes(*m.second->globalScope());
+		}	
+
+		//fill in compiletime instance with class info		
+		for (auto m : executableCodePtr->modules) {
+			auto module = m.second;
+			buildClassInfo(*module->getGlobalNamespace());
+		}
+		
+			
+	}
+
+	CppString Compiler::getElementName(const compiletime::CodeElement& element)
+	{
+		CppString result;
+
+		result = element.getScope()->module->getName();
+
+		result += "_" + element.getFullyQualifiedName();
+		
+
+		return result;
+	}
+
+	void Compiler::buildClassInfo(compiletime::NamespaceBlock& ns)
+	{
+		for (auto revIt = ns.namespaces.begin(); revIt != ns.namespaces.end(); ++revIt) {
+			auto& s = revIt->second;
+			buildClassInfo(s);
+		}
+
+
+		for (auto classIt : ns.code.classDefs) {
+			const auto& classDef = classIt.second;
+			compiletime::Class* clazz = new compiletime::Class();
+			clazz->name = classDef.getName();
+
+			auto superClazz = compiletime::Compiletime::getClass(classDef.superClassName);
+
+			for (auto m : classDef.messages) {
+				const auto& msg = m.second;
+
+				bool staticFound = false;
+				if (msg.hasFlag("static")) {
+					clazz->addClassMethod(msg.getName(), msg.getNameWithArgs(), compiletime::Class::NoOpClass);
+				}
+				else {
+					clazz->addInstanceMethod(msg.getName(), msg.getNameWithArgs(), compiletime::Class::NoOpInstance);
+				}
+			}
+
+
+			compiletime::Compiletime::addClass(clazz, superClazz);
+
+		}
+
+
+		for (auto extIt : ns.code.extendsDefs) {
+			const auto& extension = extIt.second;
+			auto clazz = compiletime::Compiletime::getClass(extension.extensionTarget);
+
+
+			for (auto imp : extension.implementations) {
+				const auto& msgBlk = imp.second;
+				bool staticFound = false;
+				if (msgBlk.msgDecl->hasFlag("static")) {
+					clazz->addClassMethod(msgBlk.msgDecl->getName(), msgBlk.msgDecl->getNameWithArgs(), compiletime::Class::NoOpClass);
+				}
+				else {
+					clazz->addInstanceMethod(msgBlk.msgDecl->getName(), msgBlk.msgDecl->getNameWithArgs(), compiletime::Class::NoOpInstance);
+				}
+			}
+		}
+	}
+
+	compiletime::ReturnValue Compiler::moduleMain(const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope, const CppString& methodName)
+	{
 
 		
-		std::function<void(compiletime::ScopedEnvironment& scope)> func;
+		auto returnType = llvm::FunctionType::get(llvmBuilderPtr->getInt32Ty(), llvmBuilderPtr->getVoidTy(), false);
+		
+		auto mainFunc = scope.module->llvmModulePtr->getFunction(methodName);
+		/*
+		if (nullptr == mainFunc) {
+			auto mainFuncProto = llvm::Function::Create(returnType,
+				llvm::Function::ExternalLinkage,
+				methodName,
+				*mainEntryModulePtr);
+			verifyFunction(*mainFuncProto);
 
-		func = ([&func,this](compiletime::ScopedEnvironment& scope) -> void {
-				
-				std::string tab = "";
-				auto p = scope.parent;
-				while (p) {
-					p = p->parent;
-					tab += "\t";
-				}
-					
-				for (auto revIt = scope.children.rbegin(); revIt != scope.children.rend();++revIt) {
-					auto s = *revIt;
-					func(*s);
-				}
+			auto block = llvm::BasicBlock::Create(*llvmCtxPtr, methodName, mainFuncProto);
 
-				//do stuff
-				for (const auto& v : scope.getVariables()) {
-					const auto& var = v.second;
-					if (var.typeDecl.type == compiletime::TypeDescriptor::typeUnknown) {
-						compiletime::Variable resolvedVar;
-						if (!scope.resolveVariable(var, resolvedVar)) {
-							//std::cout << "var '" << var.name << "', type '" << var.type.name << "' undefined" << std::endl;
-								
-								
-							ErrorItem err;
-							if (resolvedVar.typeDecl.getName().empty()) {
-								err.message = "No type is specified for this variable ('" + var.getName() + "')";									
-								err.errCode = NO_VARIABLE_TYPE_NAME;
-							}
-							else  {
-								err.message = "No type found for this variable ('" + var.getName() + "') with a type name of '" + var.typeDecl.getName() + "'";
-								err.errCode = NO_VARIABLE_TYPE_DEFINED;
-							}
-							err.code = var.location();
-							err.element = &var;
-							this->errorListing.push_back(err);
-						}
-						else {
+			llvmBuilderPtr->SetInsertPoint(block);
 
-							std::cout << "able to resolve var '" << resolvedVar.getName() << "', type '" << resolvedVar.typeDecl.getName() << "', " << resolvedVar.typeDecl.type << std::endl;
-						}
-					}
-				}
-			});
+			mainFunc = mainFuncProto;
+		}
+		*/
+		return compiletime::ReturnValue(true);
+	}
+
+	compiletime::ReturnValue Compiler::objectAssignment(const compiletime::Instance* receiver, const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope)
+	{
+
+		return compiletime::ReturnValue(true);
+	}
+
+	compiletime::ReturnValue Compiler::primitiveStringAssignment(const compiletime::Instance* receiver, const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope)
+	{
+		bool globalVar = false;
+
+		if (params.empty()) {
+			throw Compiler::Error(*this, "Attempting to assign to a variable instance with no RHS value");
+		}
+
+		if (params.size() != 1) {
+			throw Compiler::Error(*this, "Attempting to assign more than one variable to a variable instance");
+		}
+
+		auto rhsStrInstance = params[0];
+
+		if (receiver->variable) {
+			globalVar = receiver->variable->globalVar;
+		}
+
+		if (compiletime::TypeDescriptor::typeUnknown == rhsStrInstance->typeDecl.type) {
+			throw Compiler::Error(*this, "Attempting to assign RHS instance with unknown type");
+		}
+
+		if (globalVar) {
+			auto lhsGlobal = scope.module->llvmModulePtr->getNamedGlobal(receiver->getName());
+			lhsGlobal->setConstant(false);
+
+			//auto llvmVal = getLLVMValue(rhsStrInstance);
+
+			auto newString = scope.module->llvmModulePtr->getFunction("Runtime_string_new");
+
+			auto literalVal = llvmBuilderPtr->CreateGlobalStringPtr(rhsStrInstance->value.stringPtr->c_str(), "", 0, scope.module->llvmModulePtr.get());
+
+			//std::vector<llvm::Value*> args = { };
+
+			//auto strVal = llvmBuilderPtr->CreateCall(newString, args);
 
 
-
-		if (nullptr != executableCodePtr) {
-			for (auto m : executableCodePtr->modules) {
-				func(*m.second->globalScope());					
-			}				
+			lhsGlobal->setInitializer((llvm::Constant*)literalVal);
 		}
 		else {
 
 		}
 
-			
-			
-	}
 
+		return compiletime::ReturnValue(true);
+	}
 	
-	void Compiler::buildIntegerAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope)
-	{
 
+	compiletime::ReturnValue Compiler::primitiveAssignment(const compiletime::Instance* receiver, const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope)
+	{
+		bool globalVar = false;
+
+		if (params.empty()) {
+			throw Compiler::Error(*this, "Attempting to assign to a variable instance with no RHS value");
+		}
+
+		if (params.size() != 1) {
+			throw Compiler::Error(*this, "Attempting to assign more than one variable to a variable instance");
+		}
+
+		auto rhsInstance = params[0];
+
+		if (receiver->variable) {
+			globalVar = receiver->variable->globalVar;
+		}
+
+		if (compiletime::TypeDescriptor::typeUnknown == rhsInstance->typeDecl.type) {
+			throw Compiler::Error(*this, "Attempting to assign RHS instance with unknown type");
+		}
+
+		if (globalVar) {
+			auto lhsGlobal = scope.module->llvmModulePtr->getNamedGlobal(receiver->getName());
+			lhsGlobal->setConstant(false);
+
+			auto llvmVal = getLLVMValue(rhsInstance);
+
+			lhsGlobal->setInitializer((llvm::Constant*)llvmVal);			
+		}
+		else {
+			auto llvmVar = scope.getLocalVar(receiver->getName());
+
+			if (nullptr == llvmVar) {
+				throw Compiler::Error(*this, "Unable to resolve receiver, local variable '" + receiver->getName() + "'");
+			}
+
+			auto llvmVal = getLLVMValue(rhsInstance);
+
+			llvmVariableBuilderPtr->CreateStore(llvmVal, llvmVar);
+		}
+
+
+		return compiletime::ReturnValue(true);
+	}
+	
+
+	llvm::Constant* Compiler::getLLVMValue(const compiletime::Instance* instance)
+	{
+		llvm::Constant* result = nullptr;
+		switch (instance->typeDecl.type) {
+			case compiletime::TypeDescriptor::typeBool: {
+				result = instance->value.primitivePtr->data.boolV ? llvmBuilderPtr->getTrue() : llvmBuilderPtr->getFalse();
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger8: {
+				result = llvmBuilderPtr->getInt8(instance->value.primitivePtr->data.int8V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger8: {
+
+				result = llvmBuilderPtr->getInt8(instance->value.primitivePtr->data.uint8V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger16: {
+
+				result = llvmBuilderPtr->getInt16(instance->value.primitivePtr->data.uint16V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger16: {
+
+				result = llvmBuilderPtr->getInt16(instance->value.primitivePtr->data.int16V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger32: {
+
+				result = llvmBuilderPtr->getInt32(instance->value.primitivePtr->data.uint32V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger32: {
+
+				result = llvmBuilderPtr->getInt32(instance->value.primitivePtr->data.int32V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger64: {
+
+				result = llvmBuilderPtr->getInt64(instance->value.primitivePtr->data.uint64V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger64: {
+
+				result = llvmBuilderPtr->getInt64(instance->value.primitivePtr->data.int64V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger128: {
+				llvm::IntegerType* uint128Ty = llvm::IntegerType::get(*llvmCtxPtr, 128);
+				llvm::APInt val(128, { instance->value.primitivePtr->data.uint128V.lo, 
+					instance->value.primitivePtr->data.uint128V.hi });
+				result = llvm::ConstantInt::get(uint128Ty, val);
+
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger128: {
+				llvm::IntegerType* int128Ty = llvm::IntegerType::get(*llvmCtxPtr, 128);
+				llvm::APInt val(128, { instance->value.primitivePtr->data.uint128V.lo,
+					instance->value.primitivePtr->data.uint128V.hi });
+				result = llvm::ConstantInt::get(int128Ty, val);
+				
+			}break;
+
+			case compiletime::TypeDescriptor::typeDouble32: {
+				llvm::Type* halfTy = llvm::Type::getHalfTy(*llvmCtxPtr);
+				result = llvm::ConstantFP::get(halfTy, llvm::APFloat( instance->value.primitivePtr->data.floatV));
+
+			}break;
+
+			case compiletime::TypeDescriptor::typeDouble64: {
+				llvm::Type* doubleTy = llvm::Type::getDoubleTy(*llvmCtxPtr);
+				result = llvm::ConstantFP::get(doubleTy, llvm::APFloat(instance->value.primitivePtr->data.doubleV));
+
+				printf("val: %0.5f\n", instance->value.primitivePtr->data.doubleV);
+			}break;
+
+			case compiletime::TypeDescriptor::typeString: {
+				//auto str = instance->value.stringPtr;
+				
+
+			}break;
+
+			default: {
+				result = nullptr;
+			}break;
+		}
+
+		return result;
 	}
 
-	void Compiler::buildRealAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope)
-	{
-
-	}
-		
+/*
 	void Compiler::buildAssignment(const compiletime::Instance* receiver, const compiletime::Instance* param, const compiletime::ScopedEnvironment& scope)
 	{
 		
@@ -768,7 +1084,9 @@ namespace compiler {
 			} break;
 		}
 	}
+	*/
 
+	/*
 	void Compiler::buildFunction(const compiletime::Instance* receiver, const compiletime::MessageSelector& selector, const std::vector<const compiletime::Instance*>& params , const compiletime::ScopedEnvironment& scope)
 	{
 		auto fullyQualifiedSelector = selector.name;
@@ -803,12 +1121,10 @@ namespace compiler {
 
 		//llvm::Function* msgFunction = this->llvmCtxPtr
 	}
+	*/
 
-
-	void Compiler::buildFunction(const compiletime::Instance* receiver, const compiletime::Message& msg, const compiletime::ScopedEnvironment& scope)
+	void Compiler::buildSendMessage(const compiletime::Instance* receiver, const compiletime::Message& msg, const compiletime::ScopedEnvironment& scope)
 	{
-		auto selector = compiletime::MessageSelector(msg);
-
 		std::vector<const compiletime::Instance*> params;
 
 		for (const auto& p:msg.parameters) {
@@ -817,10 +1133,28 @@ namespace compiler {
 			params.push_back(&paramInst);
 		}
 
-		buildFunction(receiver, selector, params, scope);
+		auto clazz = compiletime::Compiletime::getClass(receiver->typeDecl.getName());
+		
+		if (nullptr == clazz) {
+			//no class found??? exception!
+			throw Compiler::Error(*this, "No class for reciver for type named: " + receiver->typeDecl.getName());
+		}
+		else {
+
+			try {
+				compiletime::ReturnValue res = clazz->sendMessage(msg.getName(), receiver, params);
+			}
+			catch (compiletime::Compiletime::SelectorEmpty& e) {
+				throw Compiler::Error(*this, e.message);
+			}
+			catch (compiletime::Compiletime::MessageNotFound& e) {
+				throw Compiler::Error(*this,  e.message);
+			}
+		}
 	}
 
-	void Compiler::buildFunctions( const compiletime::ScopedEnvironment& scope)
+
+	void Compiler::buildSendMessages( const compiletime::ScopedEnvironment& scope)
 	{
 		for (const auto& m : scope.getMsgSends()) {
 			const compiletime::SendMessage& sendMsg = m.second;
@@ -833,78 +1167,292 @@ namespace compiler {
 
 			receiver = sendMsg.instance;
 
-			buildFunction(receiver, sendMsg.msg, scope);
+			buildSendMessage(receiver, sendMsg.msg, scope);
 		}
+	}
+
+	void Compiler::initModuleExternalRuntimeFunctions(compiletime::Module& module)
+	{
+	
+		createExternalFunction(*module.llvmModulePtr,
+			"Runtime_string_new_empty",
+
+			llvm::FunctionType::get(
+				llvmBuilderPtr->getPtrTy(),
+				{},
+				false)
+		);
+
+
+		llvm::Type* CharTy = llvm::Type::getInt8Ty(*llvmCtxPtr);
+		llvm::Type* CharPtrTy = llvm::PointerType::get(CharTy, 0);
+
+		createExternalFunction(*module.llvmModulePtr,
+			"Runtime_string_new",
+			llvm::FunctionType::get(
+				llvmBuilderPtr->getPtrTy(),
+				CharPtrTy,
+				false)
+		);
+	}
+
+	llvm::Type* Compiler::getLLVMType(const compiletime::TypeDescriptor& type)
+	{
+		llvm::Type* result = nullptr;
+
+		switch (type) {
+			case compiletime::TypeDescriptor::typeBool: {
+				result = llvmBuilderPtr->getInt1Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger8: {
+				result = llvmBuilderPtr->getInt8Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger8: {
+				result = llvmBuilderPtr->getInt8Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger16: {
+				result = llvmBuilderPtr->getInt16Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger16: {
+				result = llvmBuilderPtr->getInt16Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger32: {
+				result = llvmBuilderPtr->getInt32Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger32: {
+				result = llvmBuilderPtr->getInt32Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger64: {
+				result = llvmBuilderPtr->getInt64Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger64: {
+				result = llvmBuilderPtr->getInt64Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger128: {
+				result = llvmBuilderPtr->getInt128Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger128: {
+				result = llvmBuilderPtr->getInt128Ty();
+			}break;
+
+			case compiletime::TypeDescriptor::typeDouble32: {
+				result = llvm::Type::getHalfTy(*llvmCtxPtr);
+			}break;
+
+			case compiletime::TypeDescriptor::typeDouble64: {
+				result = llvm::Type::getDoubleTy(*llvmCtxPtr);
+			}break;
+
+			case compiletime::TypeDescriptor::typeArray: {
+
+				result = llvm::PointerType::get(llvm::Type::getInt8Ty(*llvmCtxPtr), 0);
+			}break;
+
+			case compiletime::TypeDescriptor::typeString: {
+
+			}break;
+
+			case compiletime::TypeDescriptor::typeDictionary: {
+
+			}break;
+
+			case compiletime::TypeDescriptor::typeMessage: {
+
+			}break;
+
+			case compiletime::TypeDescriptor::typeClass: {
+
+			}break;
+
+			case compiletime::TypeDescriptor::typeRecord: {
+
+			}break;
+
+			default: {
+				result = nullptr;
+			}break;
+		}
+
+		return result;
+	}
+
+	llvm::Type* Compiler::getLLVMType(const compiletime::TypeDecl& type)
+	{
+		return getLLVMType(type.type);
+	}
+
+	void Compiler::buildCode(const compiletime::MessageBlock& msgBlock)
+	{
+		auto staticMessage = msgBlock.msgDecl->hasFlag("static");
+		
+		auto msgName = msgBlock.msgDecl->getFullyQualifiedName();
+		
+		llvm::Type* returnType = getLLVMType(msgBlock.msgDecl->returnType);
+
+		auto msgParams = msgBlock.msgDecl->parameters;
+
+		
+
+		//self is an object pointer?
+		llvm::Type* selfType = llvm::PointerType::get(llvm::Type::getInt8Ty(*llvmCtxPtr), 0);
+
+		std::vector<llvm::Type*> argTypes;
+
+		if (!staticMessage) {
+			//need to put in self param?
+			argTypes.push_back(selfType);
+		}
+		
+
+		for (auto p : msgParams) {
+			const auto& param = p.second;
+			auto paramType = getLLVMType(param.typeDecl);//  param->typeDecl);
+			argTypes.push_back(paramType);
+		}
+
+		auto functionType = llvm::FunctionType::get(returnType, argTypes, false);
+		auto functionProto =
+			llvm::Function::Create(functionType, llvm::Function::ExternalLinkage,
+				msgName,
+				*msgBlock.getScope()->module->llvmModulePtr);
+
+
+		size_t i = 0;
+		if (!staticMessage) {
+			auto arg = functionProto->getArg(0);
+			arg->setName("self");
+			i++;
+		}
+
+		for (auto p : msgParams) {
+			auto arg = functionProto->getArg(i);
+			arg->setName(p.second.getName());
+			i++;
+		}
+
+		verifyFunction(*functionProto);
+
+		auto block = llvm::BasicBlock::Create(*llvmCtxPtr, msgName, functionProto);
+		llvmBuilderPtr->SetInsertPoint(block);
+
+		auto scope = msgBlock.getScope();
+		for (const auto& v : scope->getVariables()) {
+			const compiletime::Variable& var = v.second;
+			auto varName = var.getFullyQualifiedName();
+
+
+
+			llvmVariableBuilderPtr->SetInsertPoint(&functionProto->getEntryBlock());
+
+			llvm::Type* varType = getLLVMType(var.typeDecl);
+
+			auto localVar = llvmVariableBuilderPtr->CreateAlloca(varType, 0, varName);
+			llvmVariableBuilderPtr->CreateLoad(localVar->getAllocatedType(), localVar, varName);
+
+			scope->addLocalVar(varName, localVar);
+		}
+
+		buildSendMessages(*scope);
+
+		//we need to create a tuple for the return type....
+
+		if (nullptr != msgBlock.returnVal) {
+			auto retVal = getLLVMValue(msgBlock.returnVal);
+
+			llvmBuilderPtr->CreateRet(retVal);
+		}
+	}
+
+	void Compiler::buildCode(const compiletime::ExtendsBlock& extensionBlock)
+	{
+		for (const auto& impl : extensionBlock.implementations) {
+			buildCode(impl.second);
+		}
+	}
+
+	void Compiler::buildCode(const compiletime::ClassBlock& classBlock)
+	{
+
+	}
+
+	void Compiler::buildCode(const compiletime::NamespaceBlock& ns, const compiletime::Module& module)
+	{
+		
+		auto scope = ns.getScope();
+
+		for (const auto& v : scope->getVariables()) {
+			const compiletime::Variable& var = v.second;
+			auto varName = var.getFullyQualifiedName();
+
+
+			if (var.globalVar) {
+				llvm::Type* globalVarType = var.typeDecl.getType(llvmBuilderPtr.get());
+				module.llvmModulePtr->getOrInsertGlobal(varName, globalVarType);
+			}
+			else {
+				//stack or register vars???
+
+			}
+		}
+
+
+		for (const auto& childNs : ns.namespaces) {
+			buildCode(childNs.second, module);
+		}
+
+
+
+		for (const auto& extension : ns.code.extendsDefs) {
+			buildCode(extension.second);
+		}
+
+		for (const auto& classDef : ns.code.classDefs) {
+			buildCode(classDef.second);
+		}
+	}
+
+	void Compiler::buildCode(compiletime::Module& module)
+	{
+		buildCode(*module.getGlobalNamespace(), module);
 	}
 
 	void Compiler::stage3()
 	{
-			
-		std::function<void(compiletime::ScopedEnvironment& scope)> buildCode;
-		buildCode = ([&buildCode, this](compiletime::ScopedEnvironment& scope) -> void {
-
-			auto module = scope.module;
-
-
-			for (auto revIt = scope.children.rbegin(); revIt != scope.children.rend(); ++revIt) {
-				auto s = *revIt;
-				buildCode(*s);
-			}
-
-			llvm::Value* val = nullptr;
-			for (const auto& i : scope.getInstances()) {
-				const compiletime::Instance& inst = i.second;
-					
-			}
-			for (const auto& v : scope.getVariables()) {
-				const compiletime::Variable& var = v.second;
-				auto varName = var.getFullyQualifiedName();
-
-				bool globalVar = nullptr == scope.parent;
-				if (nullptr != scope.parent) {
-
-					globalVar = (nullptr == scope.parent->parent) && (scope.isGlobal());
-				}
-
-				if (!globalVar) {
-					//one more check
-					if (nullptr == scope.scopedElement) {
-						globalVar = true;
-					}
-					else {
-						if (scope.scopedElement->scopeConsideredGlobal()) {
-							globalVar = true;
-						}
-					}
-				}
-
-				if (globalVar) {
-					llvm::Type* globalVarType = var.typeDecl.getType(this->llvmBuilderPtr.get());
-					module->llvmModulePtr->getOrInsertGlobal(varName, globalVarType);
-
-					llvm::GlobalVariable* globalVar = module->llvmModulePtr->getNamedGlobal(varName);
-				}
-				else {
-					//stack or register vars???
-
-				}
-			}
-
-			this->buildFunctions(scope);
-
-		});
-
-		if (nullptr != executableCodePtr) {
-			for (auto m : executableCodePtr->modules) {
-				auto& module = *m.second;
-
-				module.resetScope();
-				buildCode(*module.globalScope());
-			}
+		// not needed anymore because stage 2 does this but,,, 
+		//just to be paranoid....
+		if (nullptr == executableCodePtr) {
+			throw Compiler::Error(*this, "No executable code block found!");
 		}
-		else {
 
+		int mainMethodFoundCount = executableCodePtr->findStartup();
+
+		if (mainMethodFoundCount == 0) {
+			throw Compiler::Error(*this, "No 'main' method found for any module. Unable to continue without this");
 		}
+		else if (mainMethodFoundCount > 1) {
+			throw Compiler::Error(*this, "Multiple instances of 'main' method found in modules. Unable to determine which one to use.");
+		}
+		
+		for (auto m : executableCodePtr->modules) {
+			auto& module = *m.second;
+
+			module.resetScope();
+
+			initModuleExternalRuntimeFunctions(module);
+
+			buildCode(module);
+		}
+		
 	}
 
 	void Compiler::stage1NewNamespace(const parser::NamespaceBlock& node)
@@ -913,7 +1461,7 @@ namespace compiler {
 		auto ns = currentModule->createNewNamespace(node.name);
 		ns->setLocation(node.token.location);
 
-		ns->blockScope = currentModule->pushNewScope(ns->getName(), ns);
+		ns->setScope(currentModule->pushNewScope(ns->getName(), ns));
 
 	}
 
@@ -922,6 +1470,18 @@ namespace compiler {
 		currentModule->closeCurrentScope();
 
 		currentModule->popCurrentNamespace();
+	}
+
+	compiletime::Module* Compiler::createModule(const parser::ModuleBlock& node)
+	{
+		auto result = new compiletime::Module(*this);
+		result->setName(node.name);
+		result->version = node.version;
+		result->setLocation(node.token.location);
+
+		result->init(*this);
+
+		return result;
 	}
 
 	void Compiler::stage1NewModule(const parser::ModuleBlock& node)
@@ -935,10 +1495,8 @@ namespace compiler {
 			currentModule = found->second;
 		}
 		else {
-			compiletime::Module* m = new compiletime::Module(*this);
-			m->setLocation(node.token.location);
-			m->setName(moduleName);
-			m->version = node.version;
+			auto m = createModule(node);
+			
 			executableCodePtr->modules.insert(std::make_pair(m->getName(), m));
 
 			currentModule = m;
@@ -946,9 +1504,51 @@ namespace compiler {
 			
 		currentModule->resetScope();
 
+
+		auto scope = currentModule->globalScope();
+
+		compiletime::TypeDecl newType;
+		
+		newType.setName(currentModule->getName());
+		newType.type = compiletime::TypeDescriptor::typeClass;	
+
+		scope->addType(newType);
+
+
+		compiletime::Class* newClass = new compiletime::Class();
+		newClass->name = newType.getName();
+		compiletime::Compiletime::addClass(newClass, compiletime::Compiletime::getClass("module"));
+
+
 		if (options.debugMode) {
 			std::cout << "ModuleBlock " << node.name << std::endl;
 		}
+	}
+
+	void Compiler::stage1NewExtendsBlock(const parser::ExtendsBlock& node)
+	{
+		auto globalNS = currentModule->getGlobalNamespace();
+
+		printf("extension %s starting\n", node.objectToExtend.c_str());
+
+		compiletime::ExtendsBlock extensionBlk;
+		extensionBlk.setName(node.name + "_" + node.objectToExtend);
+		extensionBlk.extensionTarget = node.objectToExtend;
+		extensionBlk.setLocation(node.token.location);
+
+		auto res = globalNS->code.extendsDefs.insert(std::make_pair(extensionBlk.getName(), extensionBlk));
+		auto& extends = res.first->second;
+
+		extends.setScope(currentModule->pushNewScope(extensionBlk.getName(), &extends));
+		currentModule->setCurrentExtendsBlock(&extends);
+
+	}
+
+	void Compiler::stage1CloseExtendsBlock(const parser::ExtendsBlock& node)
+	{
+		currentModule->setCurrentExtendsBlock(nullptr);
+		currentModule->closeCurrentScope();
+		printf("extension %s closing\n", node.objectToExtend.c_str());
 	}
 
 	void Compiler::stage1NewClass(const parser::ClassBlock& node)
@@ -957,35 +1557,145 @@ namespace compiler {
 		newType.setName(node.name);
 		newType.type = compiletime::TypeDescriptor::typeClass;
 		newType.setLocation(node.token.location);
+
+		
+
 		if (!currentModule->getCurrentScope()->addType(newType)) {
 			throw Compiler::Error(*this, "Type already exists");
 		}
 
 
 		compiletime::ClassBlock newClass;
-		newClass.setName(node.name);
+		initCodeElement(newClass, node.name, node);
+
+		
 		auto* currentNs = currentModule->getCurrentNamespace();
 		auto res = currentNs->code.classDefs.insert(std::make_pair(newClass.getName(), newClass));
 		auto& cls = res.first->second;
 		
-		cls.blockScope = currentModule->pushNewScope(cls.getName(), &cls);
+		cls.setScope(currentModule->pushNewScope(cls.getName(), &cls));
+		currentModule->setCurrentClassBlock(&cls);
+
 	}
 
 	void Compiler::stage1CloseClassBlock(const parser::ClassBlock& node)
 	{
+		currentModule->setCurrentClassBlock(nullptr);
 		currentModule->closeCurrentScope();
 	}
 
-
+	void Compiler::initCodeElement(compiletime::CodeElement& element, const CppString& name, const language::ParseNode& node)
+	{
+		element.setNamespace(currentModule->getCurrentNamespace());
+		element.setScope(currentModule->getCurrentScope());
+		element.setLocation(node.token.location);
+		element.setName(name);
+	}
 
 	void Compiler::stage1NewMessageBlock(const parser::MessageBlock& node)
 	{
+		currentModule->setCurrentMessageBlock(nullptr);
+		auto scopeName = node.msgDecl->msgIsClosure ? "_closure_" : node.msgDecl->name;
+		currentModule->pushNewScope(scopeName, nullptr);
+		//currentModule->getCurrentScope()->name = 
 
-		//auto* currentNs = currentModule->getCurrentNamespace();
-		//currentNs->code.
+		compiletime::MessageBlock newMsgBlk;
+		
+		initCodeElement(newMsgBlk, node.name, node);
+		
+		compiletime::MessageDecl* msgDecl = nullptr;
 
-		currentModule->pushNewScope("", nullptr);
-		currentModule->getCurrentScope()->name = node.msgDecl->msgIsClosure ? "_closure_" : node.msgDecl->name;
+		auto extends = currentModule->getCurrentExtendsBlock();
+		if (nullptr != extends) {
+			auto found = extends->messages.find(newMsgBlk.getName());
+			if (found != extends->messages.end()) {
+				msgDecl = &found->second;
+				newMsgBlk.className = extends->extensionTarget;
+			}
+		}
+		else {
+			auto classBlk = currentModule->getCurrentClassBlock();
+			if (nullptr != classBlk) {
+				auto found = classBlk->messages.find(newMsgBlk.getName());
+				if (found != classBlk->messages.end()) {
+					msgDecl = &found->second;
+					newMsgBlk.className = classBlk->getName();
+				}
+			}
+		}
+
+
+		
+
+
+		for (auto p : node.msgDecl->params) {
+			compiletime::MessageParameter param;
+			auto paramName = p->name;
+			compiletime::TypeDecl instanceType;
+			const compiletime::Instance* inst = nullptr;
+
+			if (!currentModule->getCurrentScope()->hasType(p->type,true)) {
+				throw Compiler::Error(*this, "Message param '" + p->name + "' Type '" + p->type + "' not found");
+			}
+			else {
+				instanceType = currentModule->getCurrentScope()->getType(p->type);
+			}
+
+			if (!currentModule->getCurrentScope()->hasInstance(paramName)) {
+				compiletime::Instance newInst;
+				initCodeElement(newInst, paramName, *p);
+				newInst.typeDecl = instanceType;
+				
+				newInst.variable = &currentModule->getCurrentScope()->parent->getVariable(paramName);
+
+				inst = currentModule->getCurrentScope()->addInstance(newInst);
+			}
+
+			
+			
+
+			//auto res = newSendMsg.msg.parameters.insert(std::make_pair(param.getName(), param));
+		//	auto& msgParam = res.first->second;
+			//msgParam.setScope(currentModule->getCurrentScope());
+			//msgParam.setNamespace(currentModule->getCurrentNamespace());
+
+			//msgParam.param = &currentModule->getCurrentScope()->getInstance(msgParam.getName());
+
+		}
+
+
+
+		for (const auto& stmt : node.statements->statements) {
+			
+		}
+
+
+
+
+		extends = currentModule->getCurrentExtendsBlock();
+		if (nullptr != extends) {
+			auto res = extends->implementations.insert(std::make_pair(newMsgBlk.getName(), newMsgBlk));
+			res.first->second.setScope(currentModule->getCurrentScope());
+			res.first->second.setNamespace(currentModule->getCurrentNamespace());
+
+			res.first->second.msgDecl = msgDecl;
+			currentModule->setCurrentMessageBlock(&res.first->second);
+		}
+		else {
+			auto classBlk = currentModule->getCurrentClassBlock();
+			if (nullptr != classBlk) {
+				auto res = classBlk->implementations.insert(std::make_pair(newMsgBlk.getName(), newMsgBlk));
+				res.first->second.setScope(currentModule->getCurrentScope());
+				res.first->second.setNamespace(currentModule->getCurrentNamespace());
+
+				res.first->second.msgDecl = msgDecl;
+				currentModule->setCurrentMessageBlock(&res.first->second);
+			}
+			else {
+				throw Compiler::Error(*this, "message '" + node.name + "' declared outside of a class or extension block");
+			}
+		}
+
 	}
 
 	void Compiler::stage1CloseMessageBlock(const parser::MessageBlock& node)
@@ -1004,11 +1714,32 @@ namespace compiler {
 		return result;
 	}
 
+	void Compiler::stage1NewReturnExpr(const parser::ReturnExpression& node)
+	{
+		if (nullptr != node.retVal) {			
+			
+			std::string name = generateTempInstanceName(node.retVal);
+
+			const auto& inst = currentModule->getCurrentScope()->getInstance(name);
+			
+			auto msgBlk = currentModule->getCurrentMessageBlock();
+			msgBlk->returnVal = &inst;
+		}
+		else {
+			auto msgBlk = currentModule->getCurrentMessageBlock();
+			msgBlk->returnVal = nullptr;
+		}
+	}
+
 	void Compiler::stage1NewSendMessage(const parser::SendMessage& node)
 	{
 		//std::cout << "stage1NewSendMessage " << node.message->name << std::endl;
-		compiletime::SendMessage newSendMsg;
+		compiletime::SendMessage newSendMsg;		
+
+		initCodeElement(newSendMsg, node.message->name, node);
+		
 		newSendMsg.msg.setName(node.message->name);
+
 		if (node.message->token.isMathOperator()) {
 			newSendMsg.msg.type = compiletime::Message::msgTypeMathOperator;
 		}
@@ -1025,7 +1756,7 @@ namespace compiler {
 			newSendMsg.msg.type = compiletime::Message::msgTypeNamed;
 		}
 		
-		newSendMsg.setLocation(node.token.location);
+		
 
 		std::string instName = node.instance->name;
 		if (instName.empty()) {				
@@ -1036,17 +1767,19 @@ namespace compiler {
 		}
 		else {
 			compiletime::TypeDecl instanceType;
+			const compiletime::Variable* existingVar = nullptr;
 
 			if (currentModule->getCurrentScope()->hasVariable(instName)) {
 				 const auto& var = currentModule->getCurrentScope()->getVariable(instName);
 				 instanceType = var.typeDecl;
+				 existingVar = &var;
 			}
 
 
 			compiletime::Instance newInst;
-			newInst.setName(instName);
-			newInst.setLocation(node.token.location);
+			initCodeElement(newInst, instName, node);			
 			newInst.typeDecl = instanceType;
+			newInst.variable = existingVar;
 			currentModule->getCurrentScope()->addInstance(newInst);
 			newSendMsg.instance = &currentModule->getCurrentScope()->getInstance(instName);
 		}
@@ -1056,12 +1789,15 @@ namespace compiler {
 
 			std::string name = generateTempInstanceName(p->param);
 			std::cout << "stage1NewSendMessage param inst: " << name << std::endl;
-			param.setName(name);
 			
-			auto res = newSendMsg.msg.parameters.insert(std::make_pair(param.getName(), param));
-			auto& msgParam =  res.first->second;
+			
+			initCodeElement(param, name, *p);
+
+			newSendMsg.msg.parameters.push_back(std::make_pair(param.getName(), param));
+			//auto& res = newSendMsg.msg.parameters.back();
+			//auto& msgParam =  res.second;
 			//msgParam.setScope(currentModule->getCurrentScope());
-			msgParam.setNamespace(currentModule->getCurrentNamespace());
+			//msgParam.setNamespace(currentModule->getCurrentNamespace());
 
 			//msgParam.param = &currentModule->getCurrentScope()->getInstance(msgParam.getName());
 
@@ -1071,9 +1807,10 @@ namespace compiler {
 		
 	void Compiler::stage1NewAssignmentMessage(const parser::Assignment& node)
 	{
-		compiletime::SendMessage newSendMsg;
-		newSendMsg.msg.setName(node.message->name);
-		newSendMsg.setLocation(node.token.location);
+		compiletime::SendMessage newSendMsg;		
+
+		initCodeElement(newSendMsg, node.message->name, node);
+
 		std::string instName = node.instance->name;
 		if (instName.empty()) {
 			instName = generateTempInstanceName(node.instance);
@@ -1108,12 +1845,22 @@ namespace compiler {
 			}
 		}
 
+		compiletime::MessageDecl newMsgDecl;
+		initCodeElement(newMsgDecl, node.name, node);
+
+
+		for (auto f : node.flags.flags) {
+			compiletime::Flag newFlag;
+			newFlag.val = f.second;
+			newMsgDecl.getFlags().insert( std::make_pair(f.first, newFlag) );
+		}
 
 
 		for (const auto& p : node.params) {
 			compiletime::Variable newVar;
-			newVar.setName(p->name);
-			newVar.setLocation(p->token.location);
+			
+			initCodeElement(newVar, p->name, *p);
+
 			if (!p->type.empty()) {
 				newVar.typeDecl = currentModule->getCurrentScope()->getType(p->type, true);
 			}
@@ -1123,16 +1870,50 @@ namespace compiler {
 			if (!currentModule->getCurrentScope()->addVariable(newVar)) {
 				throw Compiler::Error(*this, "Variable already exists");
 			}
+			compiletime::MessageParameter newParam;
+			initCodeElement(newParam, p->name, *p);
+			newParam.typeDecl = newVar.typeDecl;
+			
+			newMsgDecl.parameters.push_back( std::make_pair(p->name, newParam) );
 		}
+
+		if (nullptr == node.returnType) {
+			
+		}
+		else {
+			if (node.returnType->fields.empty()) {
+				throw Compiler::Error(*this, "no fields for return tuple ");
+			}
+			newMsgDecl.returnType = currentModule->getCurrentScope()->getType(node.returnType->fields[0], true);
+		}
+
+		
+
+		auto extends =  currentModule->getCurrentExtendsBlock();
+		if (nullptr!= extends) {
+			newMsgDecl.className = extends->extensionTarget;
+			extends->messages.insert(std::make_pair(newMsgDecl.getName(), newMsgDecl));
+		}
+		else {
+			auto classBlk = currentModule->getCurrentClassBlock();
+			if (nullptr != classBlk) {
+				newMsgDecl.className = classBlk->getName();
+				classBlk->messages.insert(std::make_pair(newMsgDecl.getName(), newMsgDecl));
+			}
+			else {
+				throw Compiler::Error(*this, "message '" + node.name + "' declared outside of a class or extension block");
+			}			
+		}
+		
 	}
 
 	void Compiler::stage1NewRecord(const parser::RecordBlock& node)
 	{
 		compiletime::TypeDecl newType;
-		newType.setName(node.name);
-		newType.type = compiletime::TypeDescriptor::typeClass;
-		newType.setLocation(node.token.location);
+		
+		newType.type = compiletime::TypeDescriptor::typeRecord;		
 
+		initCodeElement(newType, node.name, node);
 		
 		if (!currentModule->getCurrentScope()->addType(newType)) {
 			throw Compiler::Error(*this, "Type already exists");
@@ -1151,9 +1932,10 @@ namespace compiler {
 		}
 			
 
-		compiletime::Variable newVar;
-		newVar.setName( node.name);
-		newVar.setLocation(node.token.location);
+		compiletime::Variable newVar;	
+
+		initCodeElement(newVar, node.name, node);
+
 		if (!node.type.empty()) {
 
 			if (!currentModule->getCurrentScope()->hasType(node.type, true)) {
@@ -1165,10 +1947,29 @@ namespace compiler {
 		if (compiletime::TypeDescriptor::typeUnknown == newVar.typeDecl.type) {
 			newVar.typeDecl.setName(node.type);
 		}
+
+		const auto& scope = *currentModule->getCurrentScope();
+		newVar.globalVar = nullptr == scope.parent;
+
+		if (nullptr != scope.parent) {
+
+			newVar.globalVar = (nullptr == scope.parent->parent) && (scope.isGlobal());
+		}
+
+		if (!newVar.globalVar) {
+			//one more check
+			if (nullptr != scope.scopedElement) {				
+				if (scope.scopedElement->scopeConsideredGlobal()) {
+					newVar.globalVar = true;
+				}
+			}
+		}
 		
 		if (!currentModule->getCurrentScope()->addVariable(newVar)) {
 			throw Compiler::Error(*this, "Variable already exists");
 		}
+
+
 	}
 
 	void Compiler::stage1Literal(const parser::LiteralNode& node)
@@ -1185,32 +1986,73 @@ namespace compiler {
 				currentModule->getCurrentScope()->addStringLiteral(name, s);
 					
 				compiletime::Instance newInst;
-				newInst.setName(name);
+				initCodeElement(newInst, name, node);
+				
 				newInst.typeDecl = currentModule->getCurrentScope()->getType("string", true);
-				newInst.setLocation(node.token.location);
+				
 					
 				newInst.value.stringPtr = &currentModule->getCurrentScope()->getStringLiteral(name);
 				currentModule->getCurrentScope()->addInstance(newInst);
 
 			}break;
 
-			case parser::LiteralNode::INTEGER_LITERAL: {
+			case parser::LiteralNode::INTEGER_LITERAL: case parser::LiteralNode::HEXADECIMAL_LITERAL: {
 				compiletime::Primitive p;
-				p.type = globalEnv->getType("int32");
-				p.data.int32V = std::stoi(node.val);
+				
+
+				if (node.type == parser::LiteralNode::INTEGER_LITERAL) {
+					p.type = globalEnv->getType("int32");
+					p.data.int32V = std::stoi(node.val);
+				}
+				else {
+					p.type = globalEnv->getType("uint32");
+					auto tmpVal = node.val;
+					std::transform(tmpVal.begin(), tmpVal.end(), tmpVal.begin(), ::tolower);
+
+					auto pos = tmpVal.find("0x");
+					if (pos != std::string::npos) {
+						tmpVal = tmpVal.substr(pos+2);
+					}
+
+					p.data.int32V = std::stoi(tmpVal);
+				}
+				
 
 
 				std::string name = generateTempInstanceName(&node);
 				currentModule->getCurrentScope()->addPrimLiteral(name, p);
 
 				compiletime::Instance newInst;
-				newInst.setName( name);
+				initCodeElement(newInst, name, node);				
 				newInst.typeDecl = p.type;
-				newInst.setLocation(node.token.location);
+				
 					
 				newInst.value.primitivePtr = &currentModule->getCurrentScope()->getPrimLiteral(name);
 				currentModule->getCurrentScope()->addInstance(newInst);
 
+			}break;
+
+			case parser::LiteralNode::DECIMAL_LITERAL: {
+				compiletime::Primitive p;
+				p.type = globalEnv->getType("real64");
+				p.data.doubleV = std::stod(node.val);
+
+
+				std::string name = generateTempInstanceName(&node);
+				currentModule->getCurrentScope()->addPrimLiteral(name, p);
+
+				compiletime::Instance newInst;
+				initCodeElement(newInst, name, node);
+				newInst.typeDecl = p.type;
+				
+
+				newInst.value.primitivePtr = &currentModule->getCurrentScope()->getPrimLiteral(name);
+				currentModule->getCurrentScope()->addInstance(newInst);
+
+			}break;
+
+			default: {
+				throw Compiler::Error(*this, "Unknown literal type");
 			}break;
 		}		
 	}
@@ -1230,8 +2072,8 @@ namespace compiler {
 
 
 		compiletime::Instance newInst;
-		newInst.setName(node.name);
-		newInst.setLocation(node.token.location);
+		initCodeElement(newInst, node.name, node);
+		
 		newInst.typeDecl = globalEnv->getType("message", false);
 		currentModule->getCurrentScope()->addInstance(newInst);
 	}
@@ -1242,8 +2084,7 @@ namespace compiler {
 			std::cout << "instance: " << node.getFullPath() << ":" << node.name << std::endl;
 		}
 		compiletime::Instance newInst;
-		newInst.setName(node.name);
-		newInst.setLocation(node.token.location);
+		initCodeElement(newInst, node.name, node);
 		bool newVarNeeded = true;
 		if (!node.type.empty()) {
 			newInst.typeDecl = currentModule->getCurrentScope()->getType(node.type, true);
@@ -1259,19 +2100,23 @@ namespace compiler {
 			newInst.typeDecl.setName(node.type);
 		}
 			
+		if (currentModule->getCurrentScope()->hasVariable(newInst.getName())) {
+			newInst.variable = &currentModule->getCurrentScope()->getVariable(newInst.getName());
+		}
+
 		currentModule->getCurrentScope()->addInstance(newInst);
+
 
 		if (!currentModule->getCurrentScope()->hasVariable(newInst.getName()) && newVarNeeded) {
 			compiletime::Variable newVar;
-			newVar.setName(newInst.getName());
+			initCodeElement(newVar, newInst.getName(), node);
 			newVar.typeDecl = newInst.typeDecl;
-			newVar.setLocation(node.token.location);
 
 			
 			if (!currentModule->getCurrentScope()->addVariable(newVar)) {
 				throw Compiler::Error(*this, "Variable already exists");
 			}
-		}			
+		}
 	}
 
 
@@ -1294,7 +2139,7 @@ namespace compiler {
 		llvmCtxPtr = std::make_unique<llvm::LLVMContext>();
 			
 		llvmBuilderPtr = std::make_unique<llvm::IRBuilder<>>(*llvmCtxPtr);
-
+		llvmVariableBuilderPtr = std::make_unique<llvm::IRBuilder<>>(*llvmCtxPtr);
 
 		llvm::InitializeAllTargetInfos();
 		llvm::InitializeAllTargets();
@@ -1339,7 +2184,104 @@ namespace compiler {
 		initBasicTypes();
 	}
 
-	
+	void Compiler::initCompiletimeCustomClass(compiletime::Class& clazz)
+	{
+		auto assignment = [this](const compiletime::Instance* self, const std::vector<const compiletime::Instance*>& params) {
+
+			return this->objectAssignment(self, params, *this->currentModule->getCurrentScope());
+			};
+		
+		
+
+
+		if (clazz.name == "module") {
+			
+		}
+		else {
+			clazz.addInstanceMethod(":=", ":=", assignment);
+		}
+	}
+
+	void Compiler::initCompiletimeCustomRecord( compiletime::Class& clazz)
+	{
+
+	}
+
+	void Compiler::initCompiletimeClass(compiletime::TypeDescriptor type, const std::string& name)
+	{
+
+		auto clazz = compiletime::Compiletime::getClass(name);
+		if ( nullptr == clazz) {
+			return;
+		}
+
+		switch (type) {
+			case compiletime::TypeDescriptor::typeInteger8: case compiletime::TypeDescriptor::typeUInteger8:
+			case compiletime::TypeDescriptor::typeInteger16: case compiletime::TypeDescriptor::typeUInteger16:
+			case compiletime::TypeDescriptor::typeInteger32: case compiletime::TypeDescriptor::typeUInteger32: {
+
+				auto assignment = [this](const compiletime::Instance* self, const std::vector<const compiletime::Instance*>& params) {
+
+					return this->primitiveAssignment(self, params, *self->getScope());
+					};
+				clazz->addInstanceMethod(":=", ":=", assignment);
+			
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger128: case compiletime::TypeDescriptor::typeUInteger128: {
+
+				auto assignment = [this](const compiletime::Instance* self, const std::vector<const compiletime::Instance*>& params) {
+
+					return this->primitiveAssignment(self, params, *self->getScope());
+					};
+				clazz->addInstanceMethod(":=", ":=", assignment);
+			}break;
+														   
+
+			case compiletime::TypeDescriptor::typeDouble32: {
+
+				auto assignment = [this](const compiletime::Instance* self, const std::vector<const compiletime::Instance*>& params) {
+
+					return this->primitiveAssignment(self, params, *self->getScope());
+					};
+				clazz->addInstanceMethod(":=", ":=", assignment);
+			}break;
+
+			case compiletime::TypeDescriptor::typeDouble64: {
+
+				auto assignment = [this](const compiletime::Instance* self, const std::vector<const compiletime::Instance*>& params) {
+
+					return this->primitiveAssignment(self, params, *self->getScope());
+					};
+				clazz->addInstanceMethod(":=", ":=", assignment);
+			}break;
+
+
+			case compiletime::TypeDescriptor::typeString: {
+
+				auto assignment = [this](const compiletime::Instance* self, const std::vector<const compiletime::Instance*>& params) {
+
+					return this->primitiveStringAssignment (self, params, *self->getScope());
+					};
+				clazz->addInstanceMethod(":=", ":=", assignment);
+			}break;
+
+
+			case compiletime::TypeDescriptor::typeClass: {
+				initCompiletimeCustomClass(*clazz);
+			}break;
+
+			case compiletime::TypeDescriptor::typeRecord: {
+				initCompiletimeCustomRecord(*clazz);
+
+			}break;
+
+			default: {
+
+			}break;
+		}
+	}
+
 	void Compiler::initBasicTypes()
 	{
 		static std::map<compiletime::TypeDescriptor, std::string> globalPrims = compiletime::Compiletime::globalPrims();
@@ -1349,7 +2291,20 @@ namespace compiler {
 			if (!globalEnv->addType(compiletime::TypeDecl(t.second, t.first))) {
 				throw Compiler::Error(*this, "Type already exists");
 			}
+			initCompiletimeClass(t.first, t.second);
 		}
+
+
+
+		//custom classes
+		if (!globalEnv->addType(compiletime::TypeDecl("module", compiletime::TypeDescriptor::typeClass)) ) {
+			throw Compiler::Error(*this, "Type already exists");
+		}
+		else {
+			initCompiletimeClass(compiletime::TypeDescriptor::typeClass,"module");
+		}
+		
+		
 	}
 
 	llvm::Module* Compiler::createModule(const std::string& name)
@@ -1361,6 +2316,8 @@ namespace compiler {
 
 	void Compiler::terminate()
 	{
+		compiletime::Compiletime::terminate();
+
 		delete globalEnv;
 	}
 
@@ -1394,8 +2351,13 @@ namespace compiler {
 				if (llvmTargetMachinePtr->addPassesToEmitFile(pass, outfile, nullptr, FileType)) {
 					throw Compiler::Error(*this, "targetMachine can't emit a file of this type");
 				}
-
-				pass.run(m);
+				try {
+					pass.run(m);
+				}
+				catch (std::exception& e) {
+					throw Compiler::Error(*this, e.what());
+				}
+				
 				outfile.flush();
 			}
 			break;

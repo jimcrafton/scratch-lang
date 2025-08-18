@@ -154,6 +154,13 @@ struct Runtime_hashtable_info {
 };
 
 
+struct Runtime_msg_object {
+
+	Runtime_array_handle params;
+
+
+};
+
 
 
 struct Runtime_Instance {
@@ -165,6 +172,9 @@ struct Runtime_Instance {
 	Runtime_hashtable_info* hashtableInfoList;
 	uint32T hashtableInfoListSize;
 	uint32T initialHashtableInfoSize;
+
+	Runtime_msg_handle main;
+	Runtime_main_func_ptr mainFunc;
 };
 
 Runtime_Instance* runtimeInstancePtr = nullptr;
@@ -732,9 +742,20 @@ void Runtime_array_heap_free_data(Runtime_array_handle self)
 		case typeArray: {
 			auto sz = Runtime_array_size(self);
 			for (uint64T i = 0; i < sz; i++) {
-				Runtime_array_handle arr = (Runtime_array_handle)Runtime_array_at(self, i);
+				Runtime_array_handle arr = *((Runtime_array_handle*)Runtime_array_at(self, i));
 				Runtime_array_delete(arr);
 			}
+			Runtime_free(internArr->data);
+		} break;
+
+		case typeString: {
+			auto sz = Runtime_array_size(self);
+			for (uint64T i = 0; i < sz; i++) {
+				Runtime_string_handle str = *((Runtime_string_handle*)Runtime_array_at(self, i));
+				Runtime_string_delete(str);
+			}
+
+			Runtime_free(internArr->data);
 		} break;
 
 		case typeDictionary: {
@@ -812,19 +833,16 @@ Runtime_array_handle Runtime_array_new_empty(Runtime_TypeDescriptor type)
 	}
 	
 	Runtime_array* arr = (Runtime_array*)result;
-	if (arr->flags == rtArrayDynamic) {
-		Runtime_heap_array* internArr = (Runtime_heap_array * )arr->internalData;
-		internArr->infoPtr = Runtime_get_array_info_for_type(type);
 
-		internArr->size = 0;
-		internArr->capacity = 0;
-		internArr->data = nullptr;
-	}
-	else if (arr->flags == rtArrayStatic) {
-		Runtime_stack_array* internArr = (Runtime_stack_array*)arr->internalData;
-		internArr->infoPtr = Runtime_get_array_info_for_type(type);
+	RUNTIME_ASSERT(rtArrayDynamic == arr->flags);
 
-	}
+	Runtime_heap_array* internArr = (Runtime_heap_array * )arr->internalData;
+	internArr->infoPtr = Runtime_get_array_info_for_type(type);
+
+	internArr->size = 0;
+	internArr->capacity = 0;
+	internArr->data = nullptr;
+	
 
 	return result;
 }
@@ -940,6 +958,136 @@ void* Runtime_array_at(Runtime_array_handle self, uint64T index)
 		result = ((uint8T*)internArr->data) + index * internArr->infoPtr->stride;
 	}
 	return result;
+}
+
+template <typename T>
+T TmplRuntime_array_at(Runtime_array_handle self, uint64T index)
+{
+	T result = T();
+	Runtime_array* selfArr = (Runtime_array*)self;
+	if (rtArrayDynamic == selfArr->flags) {
+		Runtime_heap_array* internArr = RUNTIME_HEAP_ARRAY(self);
+		result = *((T*)(((uint8T*)internArr->data) + index * internArr->infoPtr->stride));
+	}
+	else if (rtArrayStatic == selfArr->flags) {
+		Runtime_stack_array* internArr = RUNTIME_STACK_ARRAY(self);
+		result = *((T*)(((uint8T*)internArr->data) + index * internArr->infoPtr->stride));
+	}
+	return result;
+}
+
+int8T Runtime_array_at_i8(Runtime_array_handle self, uint64T index)
+{
+	return TmplRuntime_array_at<int8T>(self,index);
+}
+
+uint8T Runtime_array_at_ui8(Runtime_array_handle self, uint64T index)
+{
+	return TmplRuntime_array_at<uint8T>(self, index);
+}
+
+int16T Runtime_array_at_i16(Runtime_array_handle self, uint64T index)
+{
+	return TmplRuntime_array_at<int16T>(self, index);
+}
+
+uint16T Runtime_array_at_ui16(Runtime_array_handle self, uint64T index)
+{
+	return TmplRuntime_array_at<uint16T>(self, index);
+}
+
+int32T Runtime_array_at_i32(Runtime_array_handle self, uint64T index)
+{
+	return TmplRuntime_array_at<int32T>(self, index);
+}
+
+uint32T Runtime_array_at_ui32(Runtime_array_handle self, uint64T index)
+{
+	return TmplRuntime_array_at<uint32T>(self, index);
+}
+
+int64T Runtime_array_at_i64(Runtime_array_handle self, uint64T index)
+{
+	return TmplRuntime_array_at<int64T>(self, index);
+}
+
+uint64T Runtime_array_at_ui64(Runtime_array_handle self, uint64T index)
+{
+	return TmplRuntime_array_at<uint64T>(self, index);
+}
+
+float32T Runtime_array_at_flt(Runtime_array_handle self, uint64T index)
+{
+	return TmplRuntime_array_at<float32T>(self, index);
+}
+
+double64T Runtime_array_at_dbl(Runtime_array_handle self, uint64T index)
+{
+	return TmplRuntime_array_at<double64T>(self, index);
+}
+
+boolT Runtime_array_at_bool(Runtime_array_handle self, uint64T index)
+{
+	return TmplRuntime_array_at<boolT>(self, index);
+}
+
+Runtime_array_handle Runtime_array_at_arr(Runtime_array_handle self, uint64T index)
+{
+	Runtime_array_handle result = 0;
+
+	Runtime_array* selfArr = (Runtime_array*)self;
+	if (rtArrayDynamic == selfArr->flags) {
+		Runtime_heap_array* internArr = RUNTIME_HEAP_ARRAY(self);		
+		result = *((Runtime_array_handle*)((uint8T*)internArr->data) + index * internArr->infoPtr->stride);
+	}
+	else if (rtArrayStatic == selfArr->flags) {
+		Runtime_stack_array* internArr = RUNTIME_STACK_ARRAY(self);
+		result = *((Runtime_array_handle*)((uint8T*)internArr->data) + index * internArr->infoPtr->stride);
+	}
+
+
+	return result;
+}
+
+Runtime_string_handle Runtime_array_at_str(Runtime_array_handle self, uint64T index)
+{
+	Runtime_string_handle result = 0;
+	Runtime_array* selfArr = (Runtime_array*)self;
+	if (rtArrayDynamic == selfArr->flags) {
+		Runtime_heap_array* internArr = RUNTIME_HEAP_ARRAY(self);
+		result = *((Runtime_string_handle*)((uint8T*)internArr->data) + index * internArr->infoPtr->stride);
+	}
+	else if (rtArrayStatic == selfArr->flags) {
+		Runtime_stack_array* internArr = RUNTIME_STACK_ARRAY(self);
+		result = *((Runtime_string_handle*)((uint8T*)internArr->data) + index * internArr->infoPtr->stride);
+	}
+	return result;
+}
+
+
+
+void Runtime_array_set_arr(Runtime_array_handle self, uint64T index, Runtime_array_handle array)
+{
+	Runtime_array* selfArr = (Runtime_array*)self;
+}
+
+void Runtime_array_set_str(Runtime_array_handle self, uint64T index, Runtime_string_handle str)
+{
+	Runtime_array* selfArr = (Runtime_array*)self;
+	if (rtArrayDynamic == selfArr->flags) {
+		Runtime_heap_array* internArr = RUNTIME_HEAP_ARRAY(self);
+		
+		auto strElem = (Runtime_string_handle*)(((uint8T*)internArr->data) + index * internArr->infoPtr->stride);
+		*strElem = str;
+		//Runtime_mem_cpy(str, strElem, internArr->infoPtr->stride);
+
+	}
+	else if (rtArrayStatic == selfArr->flags) {
+		Runtime_stack_array* internArr = RUNTIME_STACK_ARRAY(self);
+
+		auto strElem = (Runtime_string_handle)(((uint8T*)internArr->data) + index * internArr->infoPtr->stride);
+		strElem = str;
+	}
 }
 
 
@@ -1695,7 +1843,7 @@ struct Runtime_hash_pair {
 	void* keyPtr;
 	void* valPtr;
 	Runtime_hash_pair* next;
-	Runtime_hash_pair* prev;
+	
 };
 
 typedef Runtime_hash_pair** Runtime_hash_table_data_array;
@@ -1763,7 +1911,7 @@ Runtime_hash_pair* Runtime_hash_pair_new(Runtime_hashtable_info* info)
 	result->keyPtr = nullptr;
 	result->valPtr = nullptr;
 	result->next = nullptr;
-	result->prev = nullptr;
+	
 
 
 	return result;
@@ -2266,7 +2414,7 @@ int32T Runtime_init()
 	totalBytesHeapAllocated = 0;
 
 	runtimeInstancePtr = (Runtime_Instance*) Runtime_alloc( sizeof(Runtime_Instance), typeUnknown);
-	
+	Runtime_Memory_init(runtimeInstancePtr, sizeof(Runtime_Instance));
 	
 
 	Runtime_TypeDescriptor types[] = {typeUnknown,
@@ -2302,6 +2450,8 @@ int32T Runtime_init()
 	runtimeInstancePtr->hashtableInfoList = (Runtime_hashtable_info*)Runtime_alloc(sizeof(Runtime_hashtable_info) * runtimeInstancePtr->initialHashtableInfoSize, typeUnknown);
 	runtimeInstancePtr->hashtableInfoListSize = runtimeInstancePtr->initialHashtableInfoSize;
 
+	runtimeInstancePtr->mainFunc = nullptr;
+
 
 	for (uint32T i = 0; i < runtimeInstancePtr->arrayInfoListSize;i++) {
 		Runtime_array_info* arrInfo = &runtimeInstancePtr->arrayInfoList[i];
@@ -2332,102 +2482,28 @@ int32T internal_Runtime_main_entry_point(int32T argc, int8T** argv)
 {
 	int32T result = 0;
 	
+	auto args = Runtime_array_new(argc, typeString);
+	
+
+
 	Runtime_printf("Runtime_main_entry_point, argc: %d, argv: %p \n", argc, argv);
-	for (int i = 0; i < argc; i++) {
-		Runtime_printf("%d : argv: %s \n", i, argv[i]);
+	for (int i = 0; i < argc; i++) {		
+		auto cmdArg = Runtime_string_new(argv[i]);
+		Runtime_array_set_str(args, i, cmdArg);
 	}
 
-
-	auto arr = Runtime_array_new(10, typeInteger32);
-	auto arrSz = Runtime_array_size(arr);
-	/*
-	for (uint32T i = 0; i < arrSz;i++) {
-		
-		auto valPtr = Runtime_array_at(arr, i);
-
-		int32T v = *((int32T*)valPtr);
-		Runtime_printf("%d : v: %d, type: %d \n", i, v, (int)Runtime_array_type(arr) );
-	}
-
-	for (uint32T i = 0; i < arrSz; i++) {
-		
-		auto valPtr = (int32T * )Runtime_array_at(arr, i);
-		*valPtr = i * 25;		
-	}
-
-
-	for (uint32T i = 0; i < arrSz; i++) {
-		
-		auto valPtr = Runtime_array_at(arr, i);
-		int32T v = *((int32T*)valPtr);
-		Runtime_printf("%d : v: %d, type: %d \n", i, v, (int)Runtime_array_type(arr));
-	}
-	*/
-	Runtime_array_delete(arr);
-
-
-	auto str = Runtime_string_new("Hello World");
-	Runtime_printf("str(%p): %s, char count: %I64u, size bytes: %I64u\n", str, Runtime_string_get_cstr(str), Runtime_string_size(str), Runtime_string_size_bytes(str));
-	Runtime_printf("hash: %I64u\n", Runtime_string_hash(str));
-
-	auto str2 = Runtime_string_new("Hello World");
-
-
-	auto res = Runtime_string_compare(str, str2);
-
-	Runtime_printf("cmp: %d\n", res);
-	Runtime_string_delete(str2);
-
-	str2 = Runtime_string_new("Foobar");
-	Runtime_printf("str(%p): %s, char count: %I64u, size bytes: %I64u\n", str2, Runtime_string_get_cstr(str2), Runtime_string_size(str2), Runtime_string_size_bytes(str2));
-
-
-	res = Runtime_string_compare(str, str2);
-	Runtime_printf("cmp: %d\n", res);
-
-
-	Runtime_string_delete(str);
-	Runtime_string_delete(str2);
-
-
-
-	arr = Runtime_array_new(10, typeFloat);
-	/*
-	for (int i = 0; i < Runtime_array_size(arr); i++) {
-		float* f = (float*)Runtime_array_at(arr, i);
-		*f = 2.443f;
-
-		int ip = (int)*f;
-		float dp = *f - (float)ip;
-		dp *= 1000.0;
-		int dip = (int)dp;
-
-		Runtime_printf("%d : f: %d.%d \n", i, ip, dip);
-	}
-	*/
-	Runtime_printf("%d : %p \n", 10, Runtime_array_at(arr,10));
-
-	float f = 1.0;
-	for (int i = 0; i < 1000; i++) {		
-				
-		
-		Runtime_array_append(arr, &f);
-		f += 0.015f;
-		
+	if (nullptr == runtimeInstancePtr->mainFunc) {
+		Runtime_printf("no main entry point\n");
+		return -1;
 	}
 	
-	/*
-	for (int i = 0; i < Runtime_array_size(arr); i++) {
-		float f = *((float*)Runtime_array_at(arr, i));
-		int ip = (int)f;
-		float dp = f - (float)ip;
-		dp *= 1000.0;
-		int dip = (int)dp;
+	Runtime_debug_printf("runtimeInstancePtr->mainFunc : %p\n", runtimeInstancePtr->mainFunc);
 
-		Runtime_printf("%d : f: %d.%d \n", i, ip,dip);
-	}
-	*/
-	Runtime_array_delete(arr);
+	result = runtimeInstancePtr->mainFunc(args);
+
+	Runtime_debug_printf("runtimeInstancePtr->mainFunc() returned : %d\n", result);
+
+	Runtime_array_delete(args);
 
 	return result;
 
@@ -2458,4 +2534,51 @@ void Runtime_terminate()
 	Runtime_debug_printf("bytes leftover : %I64u\n", totalBytesHeapAllocated);
 
 	Runtime_debug_printf("Runtime_terminate finished\n");
+}
+
+Runtime_handle Runtime_get()
+{
+	return runtimeInstancePtr;
+}
+
+void Runtime_set_main_func(void* msgMain)
+{
+	Runtime_main_func_ptr funcPtr = (Runtime_main_func_ptr)msgMain;
+	Runtime_debug_printf("Runtime_set_main_func self: %p func: %p\n", runtimeInstancePtr, funcPtr);
+	runtimeInstancePtr->mainFunc = funcPtr;
+}
+
+void Runtime_set_main(Runtime_handle, Runtime_msg_handle msgMain)
+{
+	
+}
+
+
+
+Runtime_msg_handle Runtime_msg_object_new()
+{
+	Runtime_msg_handle result = nullptr;
+	Runtime_msg_object* msg = (Runtime_msg_object*) Runtime_alloc(sizeof(Runtime_msg_object), typeMessage);
+	msg->params = Runtime_array_new_empty(typeUnknown);
+
+	return result;
+}
+
+Runtime_array_handle Runtime_msg_object_params(Runtime_msg_handle self)
+{
+	Runtime_array_handle result = nullptr;
+
+	return result;
+}
+
+void Runtime_msg_object_delete(Runtime_msg_handle self)
+{
+	Runtime_msg_object* msg = (Runtime_msg_object*) self;
+	Runtime_array_delete(msg->params);
+	Runtime_free(self);
+}
+
+void Runtime_msg_object_call(Runtime_msg_handle self, Runtime_array_handle callParams, Runtime_Return* returnVal)
+{
+
 }
