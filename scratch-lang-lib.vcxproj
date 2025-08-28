@@ -24,6 +24,7 @@
     <ClCompile Include="src\compiletime.cpp" />
     <ClCompile Include="src\datatypes.cpp" />
     <ClCompile Include="src\Parser.cpp" />
+    <ClCompile Include="src\scratch-tool-options.cpp" />
     <ClCompile Include="src\scratch-tool.cpp" />
     <ClCompile Include="src\Token.cpp" />
     <ClCompile Include="src\win32utils.cpp" />

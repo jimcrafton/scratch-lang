@@ -82,6 +82,8 @@ namespace compiler {
 		static constexpr auto COMP_OPT_VERSION = "version";
 		static constexpr auto COMP_OPT_PRINT_AST = "print-ast";
 			
+		static constexpr auto COMP_OPT_PRINT_CODE_OBJ_MODEL = "print-code-obj-model";
+
 		static constexpr auto COMP_OPT_NO_LOGO = "no-logo";
 		static constexpr auto COMP_OPT_VERBOSE_MODE = "verbose-mode";
 		static constexpr auto COMP_OPT_DEBUG_MODE = "debug-mode";
@@ -94,6 +96,7 @@ namespace compiler {
 		bool verboseMode = false;
 		bool debugMode = false;
 		bool printAST = false;
+		bool printCodeObjModel = false;
 			
 		void init(const utils::cmd_line_options& cmdline);
 	};
@@ -122,6 +125,9 @@ namespace compiler {
 		UNKNOWN_ERR = 0,
 		NO_VARIABLE_TYPE_NAME,
 		NO_VARIABLE_TYPE_DEFINED,
+		VARIABLE_ALREADY_EXISTS,
+		MESSAGE_DECL_OUTSIDE,
+		OBJECT_HAS_NO_SCOPE,
 	};
 
 		
@@ -129,29 +135,50 @@ namespace compiler {
 
 	class Compiler {
 	public:
+
+		class ErrorItem {
+		public:
+			ErrorItem() {}
+
+			ErrorItem(const std::string& err, CompilerErrorType errCode)
+				:message(err), errCode(errCode){}
+
+			ErrorItem(const std::string& err, CompilerErrorType errCode, 
+				lexer::CodeLocation loc) 
+				:message(err), code(loc), errCode(errCode) {}
+
+			ErrorItem(const std::string& err, CompilerErrorType errCode, 
+				lexer::CodeLocation loc, 
+				const compiletime::CodeElement* e) 
+				:message(err), code(loc), errCode(errCode),element(e) {}
+
+			std::string message;
+			lexer::CodeLocation code;
+			CompilerErrorType errCode = UNKNOWN_ERR;
+			const compiletime::CodeElement* element = nullptr;
+		private:
+		};
+
+		typedef std::vector<ErrorItem> ErrorListing;
+
 		class Error {
 		public:
-			const Compiler& compiler;
+			Compiler& compiler;
 			std::string message;
 				
 			CompilerErrorType errCode = UNKNOWN_ERR;
 
-			Error(const Compiler& c, const std::string& err) :compiler(c), message(err){}
+			Error(Compiler& c, const std::string& err) :compiler(c), message(err){}
+
+			Error(Compiler& c, const std::string& err, CompilerErrorType errCode, const compiletime::CodeElement* element);
+
+			Error(Compiler& c, const ErrorListing& errors);
 
 
 			void output() const;
 		};
 			
-		class ErrorItem {
-		public:
-
-			std::string message;
-			lexer::CodeLocation code;				
-			CompilerErrorType errCode = UNKNOWN_ERR;
-			const compiletime::CodeElement* element = nullptr;
-		private:
-				
-		};
+		
 
 
 		Compiler(const utils::cmd_line_options&);
@@ -257,7 +284,7 @@ namespace compiler {
 
 
 		std::map< CppString, compiletime::Class> classes;
-		std::vector<ErrorItem> errorListing;
+		ErrorListing errorListing;
 
 
 		std::chrono::system_clock::time_point buildStart;
@@ -271,6 +298,8 @@ namespace compiler {
 		void initCompiletimeCustomRecord(compiletime::Class& clazz);
 
 		void terminate();
+
+		void printCodeObjModel();
 
 		void clearEnvironment();
 
@@ -290,8 +319,6 @@ namespace compiler {
 
 		compiletime::ReturnValue objectAssignment(const compiletime::Instance* receiver, const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope);
 		
-		compiletime::ReturnValue moduleMain(const std::vector<const compiletime::Instance*>& params, const compiletime::ScopedEnvironment& scope, const CppString& methodName);
-
 
 		llvm::Constant* getLLVMValue(const compiletime::Instance* instance);
 		llvm::Type* getLLVMType(const compiletime::TypeDecl& type);
@@ -313,6 +340,10 @@ namespace compiler {
 
 		void buildCode(const compiletime::ClassBlock& classBlock);
 		void buildCode(const compiletime::MessageBlock& msgBlock);
+		void buildMsgInitializerBlock(const compiletime::MessageBlock& msgBlock);
+		void buildMsgPreConditionBlock(const compiletime::MessageBlock& msgBlock);
+		void buildMsgPostConditionBlock(const compiletime::MessageBlock& msgBlock);
+		void buildMsgFinalizeBlock(const compiletime::MessageBlock& msgBlock);
 
 		void buildClassInfo(compiletime::NamespaceBlock& ns);
 

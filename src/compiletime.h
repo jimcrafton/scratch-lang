@@ -349,8 +349,6 @@ namespace compiletime {
 		MessageBlock* impl = nullptr;
 	};
 
-
-
 	class Message : public CodeElement {
 	public:
 
@@ -365,7 +363,7 @@ namespace compiletime {
 			msgTypeNamed
 		};
 
-		Type type;
+		Type type= Type::msgTypeUnknown;
 
 		std::vector<std::pair<CppString, MessageParameter>> parameters;
 
@@ -379,7 +377,7 @@ namespace compiletime {
 		MessageSelector(const Message& m) :name(m.getName()), type(m.type){}
 
 		CppString name;
-		Message::Type type;
+		Message::Type type=Message::Type::msgTypeUnknown;
 	};
 
 
@@ -424,9 +422,14 @@ namespace compiletime {
 	class MessageBlock : public Block {
 	public:
 
+		~MessageBlock() {
+			delete preConditions;
+			delete postConditions;
+		}
 
-		PreConditionBlock preConditions;
-		PostConditionBlock postConditions;
+
+		PreConditionBlock* preConditions=nullptr;
+		PostConditionBlock* postConditions = nullptr;
 
 		MessageDecl* msgDecl = nullptr;
 		const Instance* returnVal = nullptr;
