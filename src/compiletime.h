@@ -276,6 +276,8 @@ namespace compiletime {
 
 
 		virtual bool scopeConsideredGlobal() const { return true; }
+
+		CppString toString() const;
 	};
 
 
@@ -308,7 +310,8 @@ namespace compiletime {
 		
 
 		union Value {
-			const datatypes::object* objPtr;
+			//const datatypes::object* objPtr;
+			const void* objPtr;
 			const datatypes::string* stringPtr;
 			const Primitive* primitivePtr = nullptr;
 		};
@@ -318,13 +321,20 @@ namespace compiletime {
 
 		const Variable* variable = nullptr;
 
-		
+		bool empty() const {
+			return flags.empty() && name.empty() && typeDecl.type == compiletime::TypeDescriptor::typeUnknown && scope == nullptr;
+		}
+
+		static const Instance& null() {
+			static Instance res;
+			return res;
+		}
 	};
 
 
 	class MessageParameter : public CodeElement {
 	public:
-		const Instance* param = nullptr;
+		//const Instance* param = nullptr;
 		TypeDecl typeDecl;
 		Instance defValue;
 	};
@@ -691,15 +701,46 @@ namespace compiletime {
 
 		TypeDecl* addType(const TypeDecl& t);
 
-		bool hasInstance(const CppString& name) const {
+		bool hasInstance(const CppString& name, bool recursive = false) const {
+
+			if (recursive) {
+				bool res = instances.count(name) != 0;
+				if (!res) {
+					if (nullptr != parent) {
+						return parent->hasInstance(name, true);
+					}
+				}
+			}
 			return instances.count(name) != 0;
 		}
 
-		bool hasVariable(const CppString& name) const {
+		bool hasVariable(const CppString& name, bool recursive = false) const {
+			if (recursive) {
+				bool res = variables.count(name) != 0;
+				if (!res) {
+					if (nullptr != parent) {
+						return parent->hasVariable(name, true);
+					}
+				}
+			}
 			return variables.count(name) != 0;
 		}
 
-		const Instance& getInstance(const CppString& name) const {
+		const Instance& getInstance(const CppString& name, bool recursive = false) const {
+			
+
+			if (recursive) {
+				bool res = instances.count(name) != 0;
+				if (!res) {
+					if (nullptr != parent) {
+						return parent->getInstance(name, true);
+					}
+				}
+			}
+			if (instances.count(name) == 0) {
+				return Instance::null();
+			}
+
 			return instances.find(name)->second;
 		}
 
@@ -738,14 +779,21 @@ namespace compiletime {
 		void debugPrint() const;
 
 		bool hasSendMessage(const CppString& name) const {
-			return msgSends.count(name) != 0;
+			auto found = std::find_if(msgSends.begin(), msgSends.end(), [name](const std::pair<CppString, SendMessage>& x) {
+				return x.first == name;
+				});
+			return found != msgSends.end();
 		}
 
 		const SendMessage& getSendMessage(const CppString& name) const {
-			return msgSends.find(name)->second;
+			auto found = std::find_if(msgSends.begin(), msgSends.end(), [name](const std::pair<CppString, SendMessage>& x) {
+				return x.first == name;
+				});
+
+			return found->second;
 		}
 
-		const std::map<CppString, SendMessage>& getMsgSends() const {
+		const std::vector<std::pair<CppString, SendMessage>>& getMsgSends() const {
 			return msgSends;
 		}
 
@@ -795,13 +843,14 @@ namespace compiletime {
 		std::map<CppString, TypeDecl> types;
 		std::map<CppString, Instance> instances;
 		std::map<CppString, Variable> variables;
-		std::map<CppString, SendMessage> msgSends;
+		std::vector< std::pair<CppString, SendMessage> > msgSends;
 
 		std::map<CppString, datatypes::string> strings;
 
 		std::map<CppString, Primitive> primitives;
 
 		mutable std::map<CppString, llvm::AllocaInst*> localVars;
+
 	};
 
 
@@ -991,6 +1040,7 @@ namespace compiletime {
 		static void terminate();
 
 		static const std::map< TypeDescriptor, std::string>& globalPrims();
+		static std::string primName(const TypeDescriptor& td);
 
 		static Class* getClass(const CppString& name);
 
@@ -1002,5 +1052,49 @@ namespace compiletime {
 
 		static std::map<TypeDescriptor, std::string> primitiveTypes;
 		static void initBasicTypes();
+	};
+
+
+
+
+
+
+
+
+
+	////compile time primitive classes /////////////////////////////
+	class IntClass : public Class {
+	public:
+		enum Width {
+			bitsUnknown = 0,
+			bits8 = 8,
+			bits16 = 16,
+			bits32 = 32,
+			bits64 = 64,
+			bits128 = 128,
+		};
+		Width width = bitsUnknown; // number of bits
+		bool isSigned = false;
+
+		IntClass(TypeDescriptor td);
+	};
+
+	class RealClass : public Class {
+	public:
+		enum Width {			
+			bitsUnknown = 0,
+			bits32 = 32,
+			bits64 = 64,			
+		};
+		
+		Width width = bitsUnknown;
+
+		RealClass(TypeDescriptor td);
+	};
+
+	class Array : public Class {
+	public:
+		
+		Array();
 	};
 }  //namespace compiletime

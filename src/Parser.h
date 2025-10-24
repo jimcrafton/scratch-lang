@@ -848,6 +848,47 @@ public:
 
 
 
+class ProgramBlock : public ModuleBlock {
+public:
+
+	
+	virtual ~ProgramBlock() {
+
+		delete codeFragment;
+
+	}
+
+
+	virtual std::string printInfo() const {
+		std::string result = "program:" + name;
+
+		return result;
+	};
+
+	virtual void accept(language::AstVisitor& v) const;
+};
+
+class LibraryBlock : public ModuleBlock {
+public:
+
+
+	virtual ~LibraryBlock() {
+
+		delete codeFragment;
+
+	}
+
+
+	virtual std::string printInfo() const {
+		std::string result = "library:" + name;
+
+		return result;
+	};
+
+	virtual void accept(language::AstVisitor& v) const;
+};
+
+
 
 	enum ParseErrorType {
 		UNKNOWN_ERR = 0,
@@ -858,6 +899,8 @@ public:
 		COMPILER_FLAGS,
 		CODE_FRAGMENT_BLOCK,
 		MODULE_BLOCK,
+		PROGRAM_BLOCK,
+		LIBRARY_BLOCK,
 		NAMESPACE_BLOCK,
 		STATEMENTS_BLOCK,
 		STATEMENT,
@@ -1329,8 +1372,6 @@ public:
 				}
 				currentFlags.clear();
 
-				nextToken(ctx, result);
-
 				verifyTokenTypeOrFail(ctx.getCurrentToken(),
 					lexer::Token::OPEN_BLOCK,
 					ctx,
@@ -1502,12 +1543,12 @@ public:
 				MessageDeclaration* msgDecl = messageDecl(ctx, result);
 				msgDecl->flags = currentFlags;
 
-				nextToken(ctx, result);
+				//nextToken(ctx, result);
 
 				verifyTokenTypeOrFail(ctx.getCurrentToken(),
 					lexer::Token::OPEN_BLOCK,
 					ctx,
-					"Parsing class, expected message def open block '{'",
+					"Parsing message declaration, expected message def open block '{'",
 					result);
 
 				MessageBlock* msgBlock = messageBlock(ctx, msgDecl);
@@ -1959,15 +2000,19 @@ public:
 		size_t peekOffset = 0;
 
 		if (!msgNameTok.isOperator()) {
+			/*
 			verifyTokenTypeOrFail(ctx.getCurrentToken(),
 				lexer::Token::COLON,
 				ctx,
 				"Parsing grouped expression, expected ':'",
 				parent);
+				*/
+			if (ctx.getCurrentToken().type == lexer::Token::COLON) {
+				nextToken(ctx, parent);
 
-			nextToken(ctx, parent);
-
-			tok = ctx.getCurrentToken();
+				tok = ctx.getCurrentToken();
+			}
+			
 		}
 
 		
@@ -1999,6 +2044,12 @@ public:
 						parseInstance = true;
 						parseExpression = false;
 						
+					} break;
+
+					case lexer::Token::OPEN_BRACKET: {
+						parseInstance = true;
+						parseExpression = false;
+
 					} break;
 
 					case lexer::Token::KEYWORD: {
@@ -2268,6 +2319,12 @@ public:
 
 		if (tok.isLiteral()) {
 			language::ParseNode* varLit = varLiteral(ctx, parent);		
+
+			result = varLit;
+			result->token = tok;
+		}
+		else if (tok.type == lexer::Token::OPEN_BRACKET) {
+			language::ParseNode* varLit = varLiteral(ctx, parent);
 
 			result = varLit;
 			result->token = tok;
@@ -2554,6 +2611,8 @@ public:
 				ctx,
 				"Parsing message, expected 'identifier ']' for msg return type declaration",
 				result);
+
+			nextToken(ctx, result);
 		}
 
 		return result;
@@ -3178,14 +3237,151 @@ public:
 		return result;
 	}
 
-	language::ParseNode* programBlock() {
+	language::ParseNode* programBlock(const lexer::FileContext& ctx, language::ParseNode* parent) {
 		language::ParseNode* result = nullptr;
+
+		ParseStateGuard pg(*this, PROGRAM_BLOCK, ctx, "Parsing program, invalid state exiting parse", parent);
+
+		verifyTokenOrFail(ctx.getCurrentToken(),
+			lexer::Token::KEYWORD,
+			language::Keywords[language::KEYWORD_PROGRAM],
+			ctx,
+			"Parsing program, expected 'program' keyword",
+			result);
+
+		nextToken(ctx, parent);
+
+		auto& programIdToken = ctx.getCurrentToken();
+
+		verifyTokenTypeOrFail(ctx.getCurrentToken(),
+			lexer::Token::IDENTIFIER,
+			ctx,
+			"Parsing program, expected program name ",
+			result);
+
+
+		nextToken(ctx, parent);
+
+		auto& tok = ctx.getCurrentToken();
+		lexer::Token version;
+		if (tok.type == lexer::Token::COMMA) {
+			//version present
+			nextToken(ctx, parent);
+			version = ctx.getCurrentToken();
+
+			verifyTokenTypeOrFail(version,
+				lexer::Token::VERSION_LITERAL,
+				ctx,
+				"Parsing module, expected version",
+				result);
+
+			nextToken(ctx, parent);
+		}
+
+		verifyTokenTypeOrFail(ctx.getCurrentToken(),
+			lexer::Token::OPEN_BLOCK,
+			ctx,
+			"Parsing module, expected open brace '{'",
+			result);
+
+
+
+
+		verifyTokenTypeOrFail(ctx.lastToken(),
+			lexer::Token::CLOSE_BLOCK,
+			ctx,
+			"module expected close block '}'",
+			result);
+
+
+
+		ProgramBlock* program = new ProgramBlock();
+		program->name = programIdToken.text.str();
+		program->version = version.text.str();
+		result = program;
+
+		CodeFragmentBlock* codeFrag = codeFragmentBlock(ctx, program);
+		if (nullptr == codeFrag) {
+			error(ctx.getCurrentToken(), ctx, "Parsing module, missing or invalid code fragment", result);
+			return nullptr;
+		}
+
+		program->setCodeFragment(codeFrag);
+
 
 		return result;
 	}
 
-	language::ParseNode* libraryBlock() {
+	language::ParseNode* libraryBlock(const lexer::FileContext& ctx, language::ParseNode* parent) {
 		language::ParseNode* result = nullptr;
+
+		ParseStateGuard pg(*this, LIBRARY_BLOCK, ctx, "Parsing library, invalid state exiting parse", parent);
+
+		verifyTokenOrFail(ctx.getCurrentToken(),
+			lexer::Token::KEYWORD,
+			language::Keywords[language::KEYWORD_LIB],
+			ctx,
+			"Parsing program, expected 'library' keyword",
+			result);
+
+		nextToken(ctx, parent);
+
+		auto& libraryIdToken = ctx.getCurrentToken();
+
+		verifyTokenTypeOrFail(ctx.getCurrentToken(),
+			lexer::Token::IDENTIFIER,
+			ctx,
+			"Parsing program, expected library name ",
+			result);
+
+
+		nextToken(ctx, parent);
+
+		auto& tok = ctx.getCurrentToken();
+		lexer::Token version;
+		if (tok.type == lexer::Token::COMMA) {
+			//version present
+			nextToken(ctx, parent);
+			version = ctx.getCurrentToken();
+
+			verifyTokenTypeOrFail(version,
+				lexer::Token::VERSION_LITERAL,
+				ctx,
+				"Parsing library, expected version",
+				result);
+
+			nextToken(ctx, parent);
+		}
+
+		verifyTokenTypeOrFail(ctx.getCurrentToken(),
+			lexer::Token::OPEN_BLOCK,
+			ctx,
+			"Parsing library, expected open brace '{'",
+			result);
+
+
+
+
+		verifyTokenTypeOrFail(ctx.lastToken(),
+			lexer::Token::CLOSE_BLOCK,
+			ctx,
+			"library expected close block '}'",
+			result);
+
+
+
+		LibraryBlock* library = new LibraryBlock();
+		library->name = libraryIdToken.text.str();
+		library->version = version.text.str();
+		result = library;
+
+		CodeFragmentBlock* codeFrag = codeFragmentBlock(ctx, library);
+		if (nullptr == codeFrag) {
+			error(ctx.getCurrentToken(), ctx, "Parsing module, missing or invalid code fragment", result);
+			return nullptr;
+		}
+
+		library->setCodeFragment(codeFrag);
 
 		return result;
 	}
@@ -3310,10 +3506,10 @@ public:
 						ast.root = moduleBlock(*currentCtx, nullptr);
 					}
 					else if (token.text == language::Keywords[language::KEYWORD_PROGRAM]) {
-						ast.root = programBlock();
+						ast.root = programBlock(*currentCtx, nullptr);
 					}
 					else if (token.text == language::Keywords[language::KEYWORD_LIB]) {
-						ast.root = libraryBlock();
+						ast.root = libraryBlock(*currentCtx, nullptr);
 					}
 					else {
 						error(token, *currentCtx, "Invalid keyword, expected one of module, lib, or program");

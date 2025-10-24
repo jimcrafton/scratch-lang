@@ -91,6 +91,19 @@ namespace compiler {
 			}
 		}
 
+		virtual void visitProgramBlock(const parser::ProgramBlock& node) {
+			if (state == language::AstVisitor::stateVisitStarted) {
+				compiler.stage1NewProgram(node);
+			}
+		}
+
+		virtual void visitLibraryBlock(const parser::LibraryBlock& node) {
+			if (state == language::AstVisitor::stateVisitStarted) {
+				compiler.stage1NewLibrary(node);
+			}
+		}
+		
+
 		virtual void visitRecordBlock(const parser::RecordBlock& node) {
 			if (state == language::AstVisitor::stateVisitStarted) {
 				compiler.stage1NewRecord(node);
@@ -205,6 +218,12 @@ namespace compiler {
 		compiler.errorListing.insert(compiler.errorListing.end(), errors.begin(), errors.end());
 	}
 
+	Compiler::Error::Error(Compiler& c, const std::string& err, CompilerErrorType errCode, const lexer::CodeLocation& loc)
+		: compiler(c)
+	{
+		compiler.errorListing.push_back(Compiler::ErrorItem(err, errCode, loc, nullptr));
+	}
+
 
 	void Compiler::Error::output() const 
 	{
@@ -252,6 +271,9 @@ namespace compiler {
 				if (nullptr != err.element) {
 					auto scope = err.element->getScope();						
 					std::cout << "\tscope: '" << scope->getFullName() << "'" << std::endl;
+				}
+				else {
+					std::cout << "\telement: nil" << std::endl;
 				}
 			}
 		}
@@ -364,8 +386,7 @@ namespace compiler {
 		if (!executableCodePtr) {
 			programInst = new compiletime::Program();			
 			programInst->init("a", *this);
-			executableCodePtr.reset(programInst);
-			
+			executableCodePtr.reset(programInst);			
 		}
 
 
@@ -671,6 +692,9 @@ namespace compiler {
 		Stage1 s1(*this);
 		ast.visitAll(s1);
 
+		if (nullptr == currentModule) {
+			throw Compiler::Error(*this, "Stage 1, no module found!");
+		}
 			
 		currentModule->closeCurrentScope();
 
@@ -794,6 +818,11 @@ namespace compiler {
 		for (auto extIt : ns.code.extendsDefs) {
 			const auto& extension = extIt.second;
 			auto clazz = compiletime::Compiletime::getClass(extension.extensionTarget);
+
+			if (nullptr == clazz) {
+				throw Compiler::Error(*this, "Stage 2, No class found named '"  + extension.extensionTarget + "'");
+			}
+			
 
 
 			for (auto imp : extension.implementations) {
@@ -1575,6 +1604,64 @@ namespace compiler {
 		return result;
 	}
 
+	void Compiler::stage1NewLibrary(const parser::LibraryBlock& node)
+	{
+		throw Compiler::Error(*this, "Library NOT IMPLEMENTED YET! GET TO WORK!!!");
+	}
+
+	void Compiler::stage1NewProgram(const parser::ProgramBlock& node)
+	{
+		
+		if (executableCodePtr) {
+			//throw Compiler::Error(*this, "Executable program already exists!");
+			//delete the old one since we're redefining it
+			executableCodePtr.reset();
+		}
+
+
+		programInst = new compiletime::Program();
+		programInst->init(node.name, *this);
+		programInst->version = node.version;		
+		programInst->setLocation(node.token.location);
+	
+		executableCodePtr.reset(programInst);
+
+		currentModule = executableCodePtr->primaryModule();
+		initModule(currentModule, node);
+	}
+
+	void Compiler::initModule(compiletime::Module* module, const language::ParseNode& node)
+	{
+		module->resetScope();
+
+		auto scope = module->globalScope();
+
+		compiletime::TypeDecl newType;
+
+		newType.setName(module->getName());
+		newType.type = compiletime::TypeDescriptor::typeClass;
+
+		scope->addType(newType);
+
+
+		compiletime::Class* newClass = new compiletime::Class();
+		newClass->name = newType.getName();
+		compiletime::Compiletime::addClass(newClass, compiletime::Compiletime::getClass("module"));
+
+
+		compiletime::Instance newInst;
+		
+		initCodeElement(newInst, newClass->name, node);
+		
+		
+
+		newInst.typeDecl = newType;		
+
+		auto classInst = scope->addInstance(newInst);
+		classInst->value.objPtr = newClass;
+		classInst->setNamespace(module->getGlobalNamespace());
+	}
+
 	void Compiler::stage1NewModule(const parser::ModuleBlock& node)
 	{
 			
@@ -1592,23 +1679,8 @@ namespace compiler {
 
 			currentModule = m;
 		}
-			
-		currentModule->resetScope();
 
-
-		auto scope = currentModule->globalScope();
-
-		compiletime::TypeDecl newType;
-		
-		newType.setName(currentModule->getName());
-		newType.type = compiletime::TypeDescriptor::typeClass;	
-
-		scope->addType(newType);
-
-
-		compiletime::Class* newClass = new compiletime::Class();
-		newClass->name = newType.getName();
-		compiletime::Compiletime::addClass(newClass, compiletime::Compiletime::getClass("module"));
+		initModule(currentModule, node);
 
 
 		if (options.debugMode) {
@@ -1715,7 +1787,7 @@ namespace compiler {
 			}
 		}
 
-
+		Compiler::ErrorListing errors;
 		
 
 
@@ -1725,8 +1797,9 @@ namespace compiler {
 			compiletime::TypeDecl instanceType;
 			const compiletime::Instance* inst = nullptr;
 
-			if (!currentModule->getCurrentScope()->hasType(p->type,true)) {
-				throw Compiler::Error(*this, "Message param '" + p->name + "' Type '" + p->type + "' not found");
+			if (!currentModule->getCurrentScope()->hasType(p->type,true)) {				
+				errors.push_back(Compiler::ErrorItem("Message param '" + p->name + "' Type '" + p->type + "' not found", NO_VARIABLE_TYPE_DEFINED, p->token.location));
+				continue;
 			}
 			else {
 				instanceType = currentModule->getCurrentScope()->getType(p->type);
@@ -1755,13 +1828,11 @@ namespace compiler {
 		}
 
 
+		if (nullptr != node.statements) {
+			for (const auto& stmt : node.statements->statements) {
 
-		for (const auto& stmt : node.statements->statements) {
-			
+			}
 		}
-
-
-
 
 		extends = currentModule->getCurrentExtendsBlock();
 		if (nullptr != extends) {
@@ -1782,11 +1853,13 @@ namespace compiler {
 				res.first->second.msgDecl = msgDecl;
 				currentModule->setCurrentMessageBlock(&res.first->second);
 			}
-			else {
-				throw Compiler::Error(*this, "message '" + node.name + "' declared outside of a class or extension block");
+			else {				
+				errors.push_back(Compiler::ErrorItem("message '" + node.name + "' declared outside of a class or extension block", MESSAGE_DECL_OUTSIDE, node.token.location));
 			}
 		}
-
+		if (!errors.empty()) {
+			throw Compiler::Error(*this, errors);
+		}
 	}
 
 	void Compiler::stage1CloseMessageBlock(const parser::MessageBlock& node)
@@ -1853,8 +1926,8 @@ namespace compiler {
 		if (instName.empty()) {				
 			instName = generateTempInstanceName(node.instance);
 		}
-		if ( currentModule->getCurrentScope()->hasInstance(instName)) {
-			newSendMsg.instance = &currentModule->getCurrentScope()->getInstance(node.instance->name);
+		if ( currentModule->getCurrentScope()->hasInstance(instName,true)) {
+			newSendMsg.instance = &currentModule->getCurrentScope()->getInstance(node.instance->name,true);
 		}
 		else {
 			compiletime::TypeDecl instanceType;
@@ -1946,6 +2019,7 @@ namespace compiler {
 			newMsgDecl.getFlags().insert( std::make_pair(f.first, newFlag) );
 		}
 
+		Compiler::ErrorListing errors;
 
 		for (const auto& p : node.params) {
 			compiletime::Variable newVar;
@@ -1959,7 +2033,9 @@ namespace compiler {
 				newVar.typeDecl.setName(p->type);
 			}
 			if (!currentModule->getCurrentScope()->addVariable(newVar)) {
-				throw Compiler::Error(*this, "Variable already exists", VARIABLE_ALREADY_EXISTS, &newVar);
+				//throw Compiler::Error(*this, "Variable already exists", VARIABLE_ALREADY_EXISTS, &newVar);
+				errors.push_back(Compiler::ErrorItem("Variable already exists", VARIABLE_ALREADY_EXISTS, newVar.location()));
+				continue;
 			}
 			compiletime::MessageParameter newParam;
 			initCodeElement(newParam, p->name, *p);
@@ -1972,10 +2048,12 @@ namespace compiler {
 			
 		}
 		else {
-			if (node.returnType->fields.empty()) {
-				throw Compiler::Error(*this, "no fields for return tuple ");
+			if (node.returnType->fields.empty()) {				
+				errors.push_back(Compiler::ErrorItem("no fields for return tuple", EMPTY_TUPLE_RETURN_TYPE, node.returnType->token.location));
 			}
-			newMsgDecl.returnType = currentModule->getCurrentScope()->getType(node.returnType->fields[0], true);
+			else {
+				newMsgDecl.returnType = currentModule->getCurrentScope()->getType(node.returnType->fields[0], true);
+			}
 		}
 
 		
@@ -1991,11 +2069,14 @@ namespace compiler {
 				newMsgDecl.className = classBlk->getName();
 				classBlk->messages.insert(std::make_pair(newMsgDecl.getName(), newMsgDecl));
 			}
-			else {
-				throw Compiler::Error(*this, "message '" + node.name + "' declared outside of a class or extension block", MESSAGE_DECL_OUTSIDE, &newMsgDecl);
+			else {				
+				errors.push_back(Compiler::ErrorItem("message '" + node.name + "' declared outside of a class or extension block", MESSAGE_DECL_OUTSIDE, newMsgDecl.location(), nullptr));
 			}			
 		}
 		
+		if (!errors.empty()) {
+			throw Compiler::Error(*this, errors);
+		}
 	}
 
 	void Compiler::stage1NewRecord(const parser::RecordBlock& node)
@@ -2174,34 +2255,46 @@ namespace compiler {
 		if (options.debugMode) {
 			std::cout << "instance: " << node.getFullPath() << ":" << node.name << std::endl;
 		}
-		compiletime::Instance newInst;
-		initCodeElement(newInst, node.name, node);
+
+		const compiletime::Instance* inst = nullptr;
+		
 		bool newVarNeeded = true;
-		if (!node.type.empty()) {
-			newInst.typeDecl = currentModule->getCurrentScope()->getType(node.type, true);
+
+		if (currentModule->getCurrentScope()->hasInstance(node.name, true)) {
+			inst = &currentModule->getCurrentScope()->getInstance(node.name, true);
 		}
 		else {
-			auto v = currentModule->getCurrentScope()->getVariable(node.name,true);
-			if (!v.empty()) {
-				newInst.typeDecl = v.typeDecl;
-				newVarNeeded = false;
-			}
-		}
-		if (compiletime::TypeDescriptor::typeUnknown == newInst.typeDecl.type) {
-			newInst.typeDecl.setName(node.type);
-		}
+			compiletime::Instance newInst;
+			initCodeElement(newInst, node.name, node);
 			
-		if (currentModule->getCurrentScope()->hasVariable(newInst.getName())) {
-			newInst.variable = &currentModule->getCurrentScope()->getVariable(newInst.getName());
+			if (!node.type.empty()) {
+				newInst.typeDecl = currentModule->getCurrentScope()->getType(node.type, true);
+			}
+			else {
+				auto v = currentModule->getCurrentScope()->getVariable(node.name, true);
+				if (!v.empty()) {
+					newInst.typeDecl = v.typeDecl;
+					newVarNeeded = false;
+				}
+			}
+			if (compiletime::TypeDescriptor::typeUnknown == newInst.typeDecl.type) {
+				newInst.typeDecl.setName(node.type);
+			}
+
+			if (currentModule->getCurrentScope()->hasVariable(newInst.getName())) {
+				newInst.variable = &currentModule->getCurrentScope()->getVariable(newInst.getName());
+			}
+
+			inst = currentModule->getCurrentScope()->addInstance(newInst);
 		}
 
-		currentModule->getCurrentScope()->addInstance(newInst);
+		
 
 
-		if (!currentModule->getCurrentScope()->hasVariable(newInst.getName()) && newVarNeeded) {
+		if (!currentModule->getCurrentScope()->hasVariable(inst->getName()) && newVarNeeded) {
 			compiletime::Variable newVar;
-			initCodeElement(newVar, newInst.getName(), node);
-			newVar.typeDecl = newInst.typeDecl;
+			initCodeElement(newVar, inst->getName(), node);
+			newVar.typeDecl = inst->typeDecl;
 
 			
 			if (!currentModule->getCurrentScope()->addVariable(newVar)) {				
@@ -2438,7 +2531,33 @@ namespace compiler {
 				Compiler::println(indent + "vars:");
 				auto tmpI = indent + "\t";
 				for (auto v : scope.getVariables()) {
-					Compiler::println(tmpI + "var: '" + v.second.getFullyQualifiedName() + "', type: '" + v.second.typeDecl.fullyQualifiedName() + "'");
+					const auto& var = v.second;
+
+					Compiler::println(tmpI + "var: '" + var.getFullyQualifiedName() + "', type: '" + var.typeDecl.fullyQualifiedName() + "'");
+					
+					
+					if (scope.hasInstance(var.getName())) {
+						const auto& varInst = scope.getInstance(var.getName());
+
+
+						switch (varInst.typeDecl.type) {
+							case compiletime::TypeDescriptor::typeString: {
+								Compiler::println(tmpI + "\tinstance: '" + varInst.value.stringPtr->c_str() + "'");
+							}break;
+
+							default: {
+								if (nullptr != varInst.value.primitivePtr) {
+									Compiler::println(tmpI + "\tinstance: '" + varInst.value.primitivePtr->toString());
+								}
+								else {
+									Compiler::println(tmpI + "\tinstance value is NULL");
+								}
+							}break;
+						}
+					}
+					else {
+						Compiler::println(tmpI + "\tvar: '" + var.getFullyQualifiedName() + "' has no corresponding instance in scope");
+					}
 				}
 
 				Compiler::println(indent + "expressions:");
@@ -2451,8 +2570,22 @@ namespace compiler {
 					for (const auto& p : sendMsg.msg.parameters) {
 						const auto& msgParam = p.second;
 						Compiler::println(tmp2 + "param: '" + msgParam.getFullyQualifiedName() + "'");
-						if (nullptr == msgParam.param) {
-							Compiler::println(tmp2+"\t" + "param instance NULL!'");
+						if (scope.hasInstance(msgParam.getName())) {
+							const auto& paramInst = scope.getInstance(msgParam.getName());
+							switch (paramInst.typeDecl.type) {
+							case compiletime::TypeDescriptor::typeString: {
+								Compiler::println(tmpI + "\tinstance: '" + paramInst.value.stringPtr->c_str() + "'");
+							}break;
+
+							default: {
+								if (nullptr != paramInst.value.primitivePtr) {
+									Compiler::println(tmpI + "\tinstance: '" + paramInst.value.primitivePtr->toString() + "'");
+								}
+								else {
+									Compiler::println(tmpI + "\tinstance value is NULL");
+								}
+							}break;
+							}
 						}
 					}					 
 				}

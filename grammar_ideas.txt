@@ -38,7 +38,7 @@ program_module_def ::== program_id header_info
 imports  ::== (import_src_module|import_lib_module)+
 entry_point ::== main_message
 
-main_message  ::== 'main' open_block statements_block close_block
+
 
 library  ::==
 	library_module_def

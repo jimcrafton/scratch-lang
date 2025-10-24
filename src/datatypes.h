@@ -48,6 +48,8 @@ namespace datatypes {
 
 
 	class object {
+		
+
 
 	};
 

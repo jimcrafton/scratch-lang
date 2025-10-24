@@ -128,6 +128,7 @@ namespace compiler {
 		VARIABLE_ALREADY_EXISTS,
 		MESSAGE_DECL_OUTSIDE,
 		OBJECT_HAS_NO_SCOPE,
+		EMPTY_TUPLE_RETURN_TYPE,
 	};
 
 		
@@ -171,6 +172,8 @@ namespace compiler {
 			Error(Compiler& c, const std::string& err) :compiler(c), message(err){}
 
 			Error(Compiler& c, const std::string& err, CompilerErrorType errCode, const compiletime::CodeElement* element);
+
+			Error(Compiler& c, const std::string& err, CompilerErrorType errCode, const lexer::CodeLocation& loc);
 
 			Error(Compiler& c, const ErrorListing& errors);
 
@@ -234,6 +237,9 @@ namespace compiler {
 		const utils::cmd_line_options& cmdlineOpts;
 			
 		void stage1NewModule(const parser::ModuleBlock& node);
+		void stage1NewProgram(const parser::ProgramBlock& node);
+		void stage1NewLibrary(const parser::LibraryBlock& node);
+
 		void stage1NewNamespace(const parser::NamespaceBlock& node);
 		void stage1CloseNamespace(const parser::NamespaceBlock& node);
 		
@@ -331,6 +337,8 @@ namespace compiler {
 		void initModuleExternalRuntimeFunctions(compiletime::Module& module);
 
 		compiletime::Module* createModule(const parser::ModuleBlock& node);
+
+		void initModule(compiletime::Module* module, const language::ParseNode& node);
 
 		void buildCode(compiletime::Module& module);
 

@@ -4,6 +4,9 @@ module test1 , 1.4.11
 
 {
 
+class foobar {
+
+} 
 
 class Man {
 
@@ -20,24 +23,24 @@ class bob inherits Man {
 		name: string;
 	}
 
-	msg toString : t:int34 isFat:bool [bool] {
+	msg toString : t:int32 isFat:bool [bool] {
 		return "my name is " + name ;
 	}
 }
 
 record Point {
-x:uin32; 
-y : uint44;
+x : uint32; 
+y : uint32;
 }
 
-
+d:real32;
 d := 0.00112;
 
 p:Point;
-p.x := 100;
+#p.x := 100;
 
 f: foobar;
-f add: 3 num2:5;
+f add: 3 @num2:5;
 
 }
 

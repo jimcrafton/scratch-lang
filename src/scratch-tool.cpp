@@ -38,7 +38,10 @@ int scratch_main(utils::cmd_line_options& cmdline)
 		std::cout << e.what() << std::endl;
 		returnCode = -1;
 	}
-
+	catch (...) {
+		std::cout << "Complete and utter failure, possible immediate transportation to the 9th level of Hell. Prepare yourself..." << std::endl;
+		returnCode = -1;
+	}
 	return returnCode;
 }
 

@@ -49,6 +49,61 @@ namespace compiletime {
 	*/
 
 
+	CppString Primitive::toString() const
+	{
+		CppString result;
+
+		
+
+		switch (type.type) {
+			case compiletime::TypeDescriptor::typeInteger8: {
+				result = std::to_string(this->data.int8V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger8: {
+				result = std::to_string(this->data.uint8V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger16: {
+				result = std::to_string(this->data.int16V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger16: {
+				result = std::to_string(this->data.uint16V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger32: {
+				result = std::to_string(this->data.int32V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger32: {
+				result = std::to_string(this->data.uint32V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger64: {
+				result = std::to_string(this->data.int64V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeUInteger64: {
+				result = std::to_string(this->data.uint64V);
+			}break;
+
+			case compiletime::TypeDescriptor::typeDouble32: {
+				result = std::to_string(this->data.floatV);
+			}break;
+
+			case compiletime::TypeDescriptor::typeDouble64: {
+				result = std::to_string(this->data.doubleV);
+			}break;			
+
+			default: {
+				result = "unkown instance type??";
+			}break;
+		}
+
+		return result;
+	}
+
 	CppString CodeElement::getFullyQualifiedName() const
 	{
 		CppString result = name;
@@ -463,10 +518,11 @@ namespace compiletime {
 
 			}
 		}
-		auto res = msgSends.insert(std::make_pair(key, msg));
-		res.first->second.setScope(this);
+		msgSends.push_back(std::make_pair(key, msg));
+		auto& last = msgSends.back();
+		last.second.setScope(this);
 
-		return &res.first->second;
+		return &last.second;
 	}
 
 	void ScopedEnvironment::addStringLiteral(const CppString& name, const datatypes::string& strlit)
@@ -641,10 +697,20 @@ namespace compiletime {
 
 		
 		for (auto type: primitiveTypes) {
-			Class* primClass = new Class();
-			primClass->name = type.second;
+			Class* primClass = nullptr;
 
-			Compiletime::classes.insert( std::make_pair(type.second, primClass)  );
+			if (isTypeInt(type.first)) {
+				primClass = new IntClass(type.first);
+			}
+			else if (isTypeRealNumber(type.first)) {
+				primClass = new RealClass(type.first);
+			}
+			else {
+				primClass = new Class();
+				primClass->name = type.second;
+			}		
+
+			Compiletime::classes.insert( std::make_pair(primClass->name, primClass)  );
 		}
 
 
@@ -697,6 +763,16 @@ namespace compiletime {
 		Compiletime::classes.insert(std::make_pair(clazz->name, clazz));
 	}
 
+	std::string Compiletime::primName(const TypeDescriptor& td)
+	{
+		std::string result;
+		if (Compiletime::primitiveTypes.count(td)) {
+			auto found = Compiletime::primitiveTypes.find(td);
+			result = found->second;
+		}
+		return result;
+	}
+
 	const std::map<TypeDescriptor, std::string>& Compiletime::globalPrims()
 	{
 		return Compiletime::primitiveTypes;
@@ -735,5 +811,59 @@ namespace compiletime {
 
 		return result;
 	}
+
+
+	IntClass::IntClass(TypeDescriptor td) : Class()
+	{
+		isSigned = isTypeUnsigned(td);
+		
+		name = Compiletime::primName(td);
+
+		switch (td) {
+			case compiletime::TypeDescriptor::typeInteger8: case compiletime::TypeDescriptor::typeUInteger8: {
+				width = Width::bits8;
+			
+			}break;
+			case compiletime::TypeDescriptor::typeInteger16: case compiletime::TypeDescriptor::typeUInteger16: {
+				width = Width::bits16;
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger32: case compiletime::TypeDescriptor::typeUInteger32: {
+				width = Width::bits32;
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger64: case compiletime::TypeDescriptor::typeUInteger64: {
+				width = Width::bits64;
+			}break;
+
+			case compiletime::TypeDescriptor::typeInteger128: case compiletime::TypeDescriptor::typeUInteger128: {
+				width = Width::bits128;
+			}break;
+			default: {
+				width = Width::bitsUnknown;
+			} break;
+		}
+	}
+
+
+	RealClass::RealClass(TypeDescriptor td)
+	{
+		name = Compiletime::primName(td);
+		switch (td) {
+
+			case compiletime::TypeDescriptor::typeDouble32: {
+				width = Width::bits32;
+			}break;
+
+			case compiletime::TypeDescriptor::typeDouble64:{
+				width = Width::bits64;
+			}break;
+
+			default: {
+				width = Width::bitsUnknown;
+			} break;
+		}
+	}
+
 
 }

@@ -32,6 +32,8 @@ namespace parser {
 	class NamespaceBlock;
 	class CodeFragmentBlock;
 	class ModuleBlock;
+	class ProgramBlock;
+	class LibraryBlock;
 	class MessageDeclaration;
 	class MessageBlock;
 	class MessageParam;
@@ -188,6 +190,8 @@ namespace language {
 		virtual void visitNamespaceBlock(const parser::NamespaceBlock& node) {}
 		virtual void visitCodeFragmentBlock(const parser::CodeFragmentBlock& node) {}
 		virtual void visitModuleBlock(const parser::ModuleBlock& node) {}
+		virtual void visitProgramBlock(const parser::ProgramBlock& node) {}
+		virtual void visitLibraryBlock(const parser::LibraryBlock& node) {}
 		virtual void visitMessageDecl(const parser::MessageDeclaration& node) {}
 		virtual void visitMessageBlock(const parser::MessageBlock& node) {}
 		virtual void visitMsgInstanceNode(const parser::MsgInstanceNode& node) {}	

@@ -154,6 +154,16 @@ namespace parser {
 		v.visitModuleBlock(*this);
 	}
 
+	void ProgramBlock::accept(language::AstVisitor& v) const
+	{
+		v.visitProgramBlock(*this);
+	}
+
+	void LibraryBlock::accept(language::AstVisitor& v) const
+	{
+		v.visitLibraryBlock(*this);
+	}
+
 	void MessageDeclaration::accept(language::AstVisitor & v) const
 	{
 		v.visitMessageDecl(*this);

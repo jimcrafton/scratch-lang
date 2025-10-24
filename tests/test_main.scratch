@@ -14,6 +14,9 @@ extends test_main  {
 		g := 12.234;
 		a := 3.5;
 		
+
+		a := b + 3;
+
 		return 0x56;
 	}
 }
